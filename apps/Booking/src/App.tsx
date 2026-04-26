@@ -7,6 +7,7 @@ import Book from './pages/Book'
 import Calendar from './pages/Calendar'
 import BookingsList from './pages/BookingsList'
 import Settings from './pages/Settings'
+import GoogleOAuthCallback from './pages/admin/GoogleOAuthCallback'
 
 export default function App() {
   return (
@@ -19,6 +20,9 @@ export default function App() {
           {/* Root redirect to admin panel */}
           <Route path="/" element={<Navigate to="/admin/calendar" replace />} />
           <Route path="/login" element={<Login />} />
+
+          {/* Google OAuth callback — must be public (Google redirects here without auth) */}
+          <Route path="/admin/oauth/google" element={<GoogleOAuthCallback />} />
 
           {/* Protected admin routes */}
           <Route element={<ProtectedRoute />}>
