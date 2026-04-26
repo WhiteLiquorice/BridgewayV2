@@ -1,6 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
 
 function BuildingIcon() {
   return (
@@ -111,11 +110,11 @@ const nav = [
 ]
 
 export default function Sidebar() {
-  const { org, profile, user, role } = useAuth()
+  const { org, profile, user, role, signOut } = useAuth()
   const navigate = useNavigate()
 
   async function handleSignOut() {
-    try { await supabase.auth.signOut() } catch { /* onAuthStateChange fires SIGNED_OUT locally regardless */ }
+    try { await signOut() } catch { /* Firebase signOut is local-first */ }
     navigate('/login')
   }
 

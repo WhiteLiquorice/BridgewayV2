@@ -5,6 +5,25 @@ import { getUserProfile, getOrgSettings } from '@bridgeway/database'
 
 const AuthContext = createContext(null)
 
+/**
+ * Normalize a raw profile object so that consumers can use either the
+ * camelCase fields returned by DataConnect (orgId, userId, fullName) OR
+ * the snake_case aliases used by existing components (org_id, user_id,
+ * full_name).  Both sets of keys will always be present.
+ */
+function normalizeProfile(raw) {
+  if (!raw) return null
+  return {
+    ...raw,
+    org_id:    raw.orgId    ?? raw.org_id    ?? null,
+    user_id:   raw.userId   ?? raw.user_id   ?? null,
+    full_name: raw.fullName ?? raw.full_name ?? null,
+    orgId:     raw.orgId    ?? raw.org_id    ?? null,
+    userId:    raw.userId   ?? raw.user_id   ?? null,
+    fullName:  raw.fullName ?? raw.full_name ?? null,
+  }
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -22,19 +41,20 @@ export function AuthProvider({ children }) {
     
     // Check if user is anonymous (Firebase) - Hardcoded Demo Mapping
     if (firebaseAuth.currentUser?.isAnonymous) {
-      const demoProfile = {
+      const demoProfile = normalizeProfile({
         id: 'demo-user',
         userId: userId,
         fullName: 'Demo Owner',
         email: 'demo@wellnessco.com',
         role: 'admin',
         orgId: 'aaaaaaaa-0000-0000-0000-000000000001'
-      }
+      })
       const demoOrg = {
         id: 'aaaaaaaa-0000-0000-0000-000000000001',
         name: 'Wellness Co',
         slug: 'wellness-co',
-        status: 'active'
+        status: 'active',
+        onboardingComplete: true,
       }
       setProfile(demoProfile)
       setOrg(demoOrg)
@@ -48,7 +68,7 @@ export function AuthProvider({ children }) {
       const prof = data.profiles[0];
       
       if (prof) {
-        setProfile(prof);
+        setProfile(normalizeProfile(prof));
         setOrg(prof.org);
 
         // 2. Fetch Org Settings
@@ -120,19 +140,20 @@ export function AuthProvider({ children }) {
       org?.sessionTimeoutAdminMin, org?.sessionTimeoutPatientMin])
 
   const setMockDemoSession = () => {
-    const demoProfile = {
+    const demoProfile = normalizeProfile({
       id: 'demo-user',
       userId: 'demo-user',
       fullName: 'Demo Owner',
       email: 'demo@wellnessco.com',
       role: 'admin',
       orgId: 'aaaaaaaa-0000-0000-0000-000000000001'
-    }
+    })
     const demoOrg = {
       id: 'aaaaaaaa-0000-0000-0000-000000000001',
       name: 'Wellness Co',
       slug: 'wellness-co',
-      status: 'active'
+      status: 'active',
+      onboardingComplete: true,
     }
     setSession({ user: { uid: 'demo-user' } })
     setProfile(demoProfile)

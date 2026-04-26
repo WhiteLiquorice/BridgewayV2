@@ -1,16 +1,15 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { supabase } from '../../lib/supabase'
 import { nav, LogOutIcon } from './navItems'
 
 export default function ExecutiveTopNav({ onOpenSearch, onOpenShortcuts }) {
-  const { profile, user, org } = useAuth()
+  const { profile, user, org, signOut } = useAuth()
   const { primaryColor } = useTheme()
 
   async function handleLogout() {
     try {
-      await supabase.auth.signOut()
+      await signOut()
     } catch {
       // Sign-out failure is non-fatal
     }
@@ -86,7 +85,7 @@ export default function ExecutiveTopNav({ onOpenSearch, onOpenShortcuts }) {
           {profile && (
             <div className="w-8 h-8 rounded-full bg-gray-800 border border-gray-700 flex items-center justify-center flex-shrink-0">
               <span className="text-xs font-semibold text-gray-400">
-                {(profile.full_name || '?').charAt(0).toUpperCase()}
+                {(profile.fullName || '?').charAt(0).toUpperCase()}
               </span>
             </div>
           )}

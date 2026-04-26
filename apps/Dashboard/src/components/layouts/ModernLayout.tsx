@@ -8,7 +8,6 @@ import AddClientModal from '../AddClientModal'
 import NotificationBell from '../NotificationBell'
 import OnboardingWizard from '../OnboardingWizard'
 import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
 
 const PAGE_TITLES = {
   '/overview': 'Dashboard',
@@ -26,7 +25,7 @@ const PAGE_TITLES = {
 export default function ModernLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { profile } = useAuth()
+  const { profile, org } = useAuth()
 
   const [cmdOpen, setCmdOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -35,14 +34,12 @@ export default function ModernLayout() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [fadeKey, setFadeKey] = useState(location.pathname)
 
-  // Check onboarding status
+  // Show onboarding wizard for new orgs that haven't completed setup
   useEffect(() => {
-    if (!profile?.org_id) return
-    supabase.from('orgs').select('onboarding_complete').eq('id', profile.org_id).single()
-      .then(({ data }) => {
-        if (data && !data.onboarding_complete) setShowOnboarding(true)
-      })
-  }, [profile?.org_id])
+    if (org && org.onboardingComplete === false) {
+      setShowOnboarding(true)
+    }
+  }, [org?.id])
 
   // Page-transition fade key
   useEffect(() => {
@@ -119,7 +116,7 @@ export default function ModernLayout() {
             {profile && (
               <div className="w-8 h-8 rounded-full bg-white/[0.07] border border-white/[0.12] flex items-center justify-center flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400">
-                  {(profile.full_name || '?').charAt(0).toUpperCase()}
+                  {(profile.fullName || '?').charAt(0).toUpperCase()}
                 </span>
               </div>
             )}

@@ -1,14 +1,13 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
 import { nav, LogOutIcon } from './navItems'
 
 export default function ModernSidebar() {
-  const { org, profile, user, role } = useAuth()
+  const { org, profile, user, role, signOut } = useAuth()
   const navigate = useNavigate()
 
   async function handleSignOut() {
-    try { await supabase.auth.signOut() } catch {}
+    try { await signOut() } catch {}
     navigate('/login')
   }
 

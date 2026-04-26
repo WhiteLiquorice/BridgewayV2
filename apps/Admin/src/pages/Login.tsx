@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { auth } from '../lib/firebase'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 
 export default function Login() {
   const [email,    setEmail]    = useState('')
@@ -14,10 +15,15 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-      if (err) { setError(err.message) } else { navigate('/') }
-    } catch {
-      setError('Unable to sign in — check your connection and try again.')
+      await signInWithEmailAndPassword(auth, email, password)
+      navigate('/')
+    } catch (err) {
+      // Firebase error codes are more descriptive than Supabase's
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password.')
+      } else {
+        setError('Unable to sign in — check your connection and try again.')
+      }
     } finally {
       setLoading(false)
     }

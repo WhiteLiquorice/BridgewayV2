@@ -1,6 +1,4 @@
 import { useState } from 'react'
-import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
 import { createPortal } from 'react-dom'
 
 const STEPS = [
@@ -51,14 +49,8 @@ export default function OnboardingWizard({ isOpen, onComplete }) {
   const current = STEPS[step]
   const isLast = step === STEPS.length - 1
 
-  async function handleFinish() {
-    // Mark onboarding as complete
-    if (profile?.org_id) {
-      await supabase
-        .from('orgs')
-        .update({ onboarding_complete: true })
-        .eq('id', profile.org_id)
-    }
+  function handleFinish() {
+    // TODO: mark onboarding complete via DataConnect mutation once port is done
     onComplete()
   }
 

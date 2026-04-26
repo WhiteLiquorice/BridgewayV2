@@ -1,16 +1,15 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { supabase } from '../../lib/supabase'
 import { nav, LogOutIcon } from './navItems'
 
 export default function ClassicTabNav({ onOpenShortcuts }) {
-  const { profile, user, org } = useAuth()
+  const { profile, user, org, signOut } = useAuth()
   const { primaryColor } = useTheme()
 
   async function handleLogout() {
     try {
-      await supabase.auth.signOut()
+      await signOut()
     } catch {
       // Sign-out failure is non-fatal
     }

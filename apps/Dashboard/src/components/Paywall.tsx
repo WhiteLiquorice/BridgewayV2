@@ -6,11 +6,11 @@ import { useAuth } from '../context/AuthContext'
  * Admins see a direct link to the Billing page.
  */
 export default function Paywall() {
-  const { profile } = useAuth()
+  const { profile, signOut } = useAuth()
   const isAdmin = profile?.role === 'admin'
 
   function handleSignOut() {
-    import('../lib/supabase').then(({ supabase }) => supabase.auth.signOut())
+    signOut().catch(() => { /* non-fatal */ })
   }
 
   return (

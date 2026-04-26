@@ -1,15 +1,14 @@
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
 
 /**
  * Paywall — shown when org.status === 'inactive' (subscription lapsed or payment failed).
  * Admin app users are always admin/manager, so we always show the Billing link.
  */
 export default function Paywall() {
-  const { profile } = useAuth()
+  const { profile, signOut } = useAuth()
 
   function handleSignOut() {
-    supabase.auth.signOut()
+    signOut().catch(() => { /* non-fatal */ })
   }
 
   return (
