@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- Maison Luxe Spa — Demo Seed
+-- Wellness Co — Demo Seed
 -- Run via: npx supabase db query --linked --file supabase/seed_spa_demo.sql
 -- ═══════════════════════════════════════════════════════════════════════════
 
@@ -27,11 +27,11 @@ ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS payment_past_due boolean DEFAU
 INSERT INTO orgs (id, name, slug, address, phone, website, primary_color, status, onboarding_complete, layout_theme, app_theme)
 VALUES (
   'aaaaaaaa-0000-0000-0000-000000000001',
-  'Maison Luxe Spa',
-  'maison-luxe',
+  'Wellness Co',
+  'wellness-co',
   '402 Magnolia Lane, Suite 100, Nashville, TN 37201',
   '(615) 555-0142',
-  'https://maisonluxespa.com',
+  'https://wellnessco.com',
   '#9b7561',
   'active', true, 'minimal', 'luxury'
 );
@@ -49,7 +49,7 @@ INSERT INTO auth.users (
   'dddddddd-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated',
-  'owner@maisonluxespa.com',
+  'owner@wellnessco.com',
   crypt('SpaDemo2026!', gen_salt('bf')),
   now(), now(), now(),
   '{"provider":"email","providers":["email"]}'::jsonb,
@@ -59,9 +59,9 @@ INSERT INTO auth.users (
 
 -- ── 4. Staff profiles (no user_id — invite pending) ──────────────────────────
 INSERT INTO profiles (id, org_id, role, full_name, email, is_active) VALUES
-  ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'staff', 'Margaux Delacroix', 'margaux@maisonluxespa.com', true),
-  ('bbbbbbbb-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'staff', 'Isabelle Hart',     'isabelle@maisonluxespa.com', true),
-  ('bbbbbbbb-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'staff', 'Theo Kim',          'theo@maisonluxespa.com',     true);
+  ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'staff', 'Margaux Delacroix', 'margaux@wellnessco.com', true),
+  ('bbbbbbbb-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000001', 'staff', 'Isabelle Hart',     'isabelle@wellnessco.com', true),
+  ('bbbbbbbb-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000001', 'staff', 'Theo Kim',          'theo@wellnessco.com',     true);
 
 -- ── 5. Services ───────────────────────────────────────────────────────────────
 INSERT INTO services (id, org_id, name, description, duration_minutes, price, is_archived) VALUES
@@ -135,7 +135,7 @@ INSERT INTO org_settings (org_id, payment_required, booking_config)
 VALUES (
   'aaaaaaaa-0000-0000-0000-000000000001',
   false,
-  '{"show_providers":true,"require_phone":true,"welcome_text":"Welcome to Maison Luxe. Your moment of peace begins here.","confirmation_text":"Your reservation has been received. We will reach out within 2 hours to confirm. Please arrive 10 minutes early to complete your guest profile."}'::jsonb
+  '{"show_providers":true,"require_phone":true,"welcome_text":"Welcome to Wellness Co. Your journey to health begins here.","confirmation_text":"Your reservation has been received. We will reach out within 2 hours to confirm. Please arrive 10 minutes early to complete your guest profile."}'::jsonb
 )
 ON CONFLICT (org_id) DO UPDATE SET
   booking_config   = EXCLUDED.booking_config,

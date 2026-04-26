@@ -14,8 +14,29 @@ If a user is not using a supported framework, they can use the generated SDK dir
 Here's an example of how to use it with the first 5 operations:
 
 ```js
-import {  } from '@bridgeway/database';
+import { getUserProfile, getOrgSettings, getOrgProfiles, updateProfileStatus, createOrgProfile, updateOrgBranding, updateOrgSettings } from '@bridgeway/database';
 
+
+// Operation GetUserProfile: 
+const { data } = await GetUserProfile(dataConnect);
+
+// Operation GetOrgSettings:  For variables, look at type GetOrgSettingsVars in ../index.d.ts
+const { data } = await GetOrgSettings(dataConnect, getOrgSettingsVars);
+
+// Operation GetOrgProfiles:  For variables, look at type GetOrgProfilesVars in ../index.d.ts
+const { data } = await GetOrgProfiles(dataConnect, getOrgProfilesVars);
+
+// Operation UpdateProfileStatus:  For variables, look at type UpdateProfileStatusVars in ../index.d.ts
+const { data } = await UpdateProfileStatus(dataConnect, updateProfileStatusVars);
+
+// Operation CreateOrgProfile:  For variables, look at type CreateOrgProfileVars in ../index.d.ts
+const { data } = await CreateOrgProfile(dataConnect, createOrgProfileVars);
+
+// Operation UpdateOrgBranding:  For variables, look at type UpdateOrgBrandingVars in ../index.d.ts
+const { data } = await UpdateOrgBranding(dataConnect, updateOrgBrandingVars);
+
+// Operation UpdateOrgSettings:  For variables, look at type UpdateOrgSettingsVars in ../index.d.ts
+const { data } = await UpdateOrgSettings(dataConnect, updateOrgSettingsVars);
 
 
 ```

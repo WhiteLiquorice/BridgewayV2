@@ -958,8 +958,6 @@ function PricingSection() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({})
   const [selectedPlan, setSelectedPlan] = useState<'booking' | 'full'>('full')
 
-  const supabaseUrl     = import.meta.env.PUBLIC_SUPABASE_URL     || 'https://placeholder.supabase.co'
-  const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
   const priceBooking    = import.meta.env.PUBLIC_STRIPE_PRICE_BOOKING || 'price_1TQG6JJRMfcFhxi8uagAAgis'
   const priceFull       = import.meta.env.PUBLIC_STRIPE_PRICE_FULL    || 'price_1TQG85JRMfcFhxi8TK6bpIBU'
 
@@ -972,16 +970,17 @@ function PricingSection() {
     setSubmitting(true)
     setError(null)
     try {
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabase = createClient(supabaseUrl, supabaseAnonKey)
-      const { data, error: fnError } = await supabase.functions.invoke('create-checkout-session', {
-        body: { 
-          email: form.email.trim(), 
-          orgName: form.practice.trim(), 
-          priceId: selectedPlan === 'booking' ? priceBooking : priceFull 
-        },
+      const { httpsCallable } = await import('firebase/functions')
+      const { functions } = await import('../lib/firebase')
+      const createCheckoutSession = httpsCallable(functions, 'createCheckoutSession')
+      
+      const result = await createCheckoutSession({
+        email: form.email.trim(), 
+        orgName: form.practice.trim(), 
+        priceId: selectedPlan === 'booking' ? priceBooking : priceFull 
       })
-      if (fnError) throw fnError
+      
+      const data = result.data as { url?: string }
       if (data?.url) window.location.href = data.url
       else throw new Error('No checkout URL returned')
     } catch (err: any) {
@@ -1127,7 +1126,7 @@ function PricingSection() {
                   value={form.practice}
                   onChange={e => { setForm(f => ({ ...f, practice: e.target.value })); setFieldErrors(v => ({ ...v, practice: false })) }}
                   className={inputCls('practice')}
-                  placeholder="Wellness Chiropractic"
+                  placeholder="Wellness Co"
                 />
               </div>
               <div>
@@ -1186,7 +1185,7 @@ function FAQSection() {
     },
     {
       q: 'How does setup work?',
-      a: 'When you sign up, Asher personally onboards your practice. We set up your account, import your services and staff, configure your widgets, and make sure everything looks right before you go live. Most practices are fully set up within 48 hours.',
+      a: 'When you sign up, we personally onboard your practice. We set up your account, import your services and staff, configure your widgets, and make sure everything looks right before you go live. Most practices are fully set up within 48 hours.',
     },
     {
       q: 'What kinds of businesses use Bridgeway?',

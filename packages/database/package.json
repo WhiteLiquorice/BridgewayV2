@@ -3,8 +3,17 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "./src/generated/index.cjs.js",
+  "module": "./src/generated/esm/index.esm.js",
+  "types": "./src/generated/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/generated/index.d.ts",
+      "import": "./src/generated/esm/index.esm.js",
+      "require": "./src/generated/index.cjs.js"
+    }
+  },
   "dependencies": {
-    "@bridgeway/database": "file:src/generated",
-    "firebase": "^10.11.0"
+    "firebase": "^12.12.1"
   }
 }

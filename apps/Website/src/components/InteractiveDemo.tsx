@@ -54,7 +54,7 @@ export default function InteractiveDemo({
   onGoToPricing: () => void
   onToast: (message: string, tone?: 'success' | 'info') => void
 }) {
-  const [businessName, setBusinessName] = useState('Lumen Aesthetics')
+  const [businessName, setBusinessName] = useState('Wellness Co')
   const [brandColor,   setBrandColor]   = useState('#7a5c3b')
   const [appTheme,     setAppTheme]     = useState<AppTheme>('luxury')
   const [activeStep,   setActiveStep]   = useState<ActiveStep>('setup')
@@ -306,7 +306,7 @@ export default function InteractiveDemo({
                   Get this exact setup<br className="hidden sm:block" /> running on your domain today.
                 </h3>
                 <p className="text-sm text-neutral-400 font-light max-w-xl mx-auto mb-7">
-                  Same experience, your brand, your clients. Personally onboarded by Asher in under 48 hours.
+                  Same experience, your brand, your clients. Personally onboarded in under 48 hours.
                 </p>
                 <button
                   onClick={onGoToPricing}

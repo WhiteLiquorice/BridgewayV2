@@ -7,6 +7,9 @@ type Org @table {
   website: String
   logoUrl: String
   primaryColor: String @default(value: "#f59e0b")
+  secondaryColor: String @default(value: "#c9a84c")
+  layoutTheme: String @default(value: "modern")
+  appTheme: String @default(value: "modern")
   subscriptionTier: String @default(value: "base")
   sessionTimeoutAdminMin: Int @default(value: 480)
   sessionTimeoutManagerMin: Int @default(value: 480)
@@ -27,7 +30,7 @@ type Profile @table {
   fullName: String
   email: String
   phone: String
-  commission_rate_percentage: Int @default(value: 0)
+  commissionRatePercentage: Int @default(value: 0)
   isActive: Boolean @default(value: true)
   createdAt: Timestamp! @default(expr: "request.time")
 }
@@ -173,14 +176,13 @@ type PosTransaction @table {
   items: Any! # Using Any for JSONB
   tipCents: Int @default(value: 0)
   totalCents: Int!
-  commission_amount: Float @default(value: 0)
+  commissionAmount: Float @default(value: 0)
   stripePaymentIntentId: String
   status: String @default(value: "pending")
   createdAt: Timestamp! @default(expr: "request.time")
 }
 
-type OrgSetting @table {
-  id: UUID! @default(expr: "uuidV4()")
+type OrgSetting @table(key: ["org"]) {
   org: Org! @unique
   stripeSecretKey: String
   paymentRequired: Boolean @default(value: false)
@@ -190,6 +192,8 @@ type OrgSetting @table {
   externalCalendarId: String
   externalCalendarType: String # e.g. 'google', 'outlook'
   externalCalendarSyncEnabled: Boolean @default(value: false)
+  disabledWidgets: Any @default(value: [])
+  bookingConfig: Any @default(value: {})
   createdAt: Timestamp! @default(expr: "request.time")
 }
 

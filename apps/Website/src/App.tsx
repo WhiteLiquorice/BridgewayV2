@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from './lib/supabase'
 import { functions } from './lib/firebase'
 import { httpsCallable } from 'firebase/functions'
 
@@ -679,7 +678,7 @@ function GetStartedPage() {
               value={form.practice}
               onChange={e => { setForm(f => ({ ...f, practice: e.target.value })); setErrors(e => ({ ...e, practice: false })) }}
               className={inputClass('practice')}
-              placeholder="Wellness Chiropractic"
+              placeholder="Wellness Co"
             />
           </div>
           <div>
@@ -729,7 +728,7 @@ function HowItWorksPage() {
         },
         {
           heading: 'How does setup work?',
-          body: 'When you sign up, Asher personally onboards your practice. We set up your account, import your services and staff, configure your widgets, and make sure everything looks right before you go live. Most practices are fully set up within 48 hours.',
+          body: 'When you sign up, we personally onboard your practice. We set up your account, import your services and staff, configure your widgets, and make sure everything looks right before you go live. Most practices are fully set up within 48 hours.',
         },
         {
           heading: 'What kinds of businesses use Bridgeway?',

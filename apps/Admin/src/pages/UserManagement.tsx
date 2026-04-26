@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgProfiles, updateProfileStatus, createOrgProfile } from '@bridgeway/database'
+import { sendPasswordResetEmail, getAuth } from 'firebase/auth'
 
 // Role badge colors
 function RoleBadge({ role }) {
@@ -28,13 +30,13 @@ function Toggle({ enabled, onChange }) {
     >
       <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
         ${enabled ? 'translate-x-5' : 'translate-x-1'}`}
-      />
+    />
     </button>
   )
 }
 
 export default function UserManagement() {
-  const { profile } = useAuth()
+  const { org } = useAuth()
 
   const [users,       setUsers]       = useState([])
   const [loading,     setLoading]     = useState(true)
@@ -54,86 +56,71 @@ export default function UserManagement() {
   const [actionFeedback, setActionFeedback] = useState({}) // { [id]: 'deactivated' | 'reactivated' | 'reset' | error string }
 
   async function loadUsers() {
-    if (!profile?.org_id) return
+    if (!org?.id) return
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('org_id', profile.org_id)
-        .order('full_name')
-      if (err) { setError(err.message); return }
-      setUsers(data || [])
-    } catch {
+      const { data } = await getOrgProfiles(dataconnect, { orgId: org.id });
+      setUsers(data.profiles || [])
+    } catch (err) {
       setError('Failed to load users — check your connection.')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { loadUsers() }, [profile?.org_id])
+  useEffect(() => { loadUsers() }, [org?.id])
 
   async function handleToggleActive(row) {
-    const newValue = !row.is_active
-    const { error: err } = await supabase
-      .from('profiles')
-      .update({ is_active: newValue })
-      .eq('id', row.id)
-    if (err) {
-      setActionFeedback(prev => ({ ...prev, [row.id]: `Error: ${err.message}` }))
-    } else {
+    const newValue = !row.isActive
+    try {
+      await updateProfileStatus(dataconnect, { id: row.id, isActive: newValue });
       setActionFeedback(prev => ({ ...prev, [row.id]: newValue ? 'Reactivated' : 'Deactivated' }))
-      setUsers(prev => prev.map(u => u.id === row.id ? { ...u, is_active: newValue } : u))
+      setUsers(prev => prev.map(u => u.id === row.id ? { ...u, isActive: newValue } : u))
       setTimeout(() => setActionFeedback(prev => { const n = { ...prev }; delete n[row.id]; return n }), 2500)
+    } catch (err) {
+      setActionFeedback(prev => ({ ...prev, [row.id]: `Error: ${err.message}` }))
     }
   }
 
   async function handleResetPassword(row) {
-    const { error: err } = await supabase.auth.resetPasswordForEmail(row.email)
-    if (err) {
-      setActionFeedback(prev => ({ ...prev, [row.id]: `Error: ${err.message}` }))
-    } else {
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, row.email);
       setActionFeedback(prev => ({ ...prev, [row.id]: 'Reset email sent' }))
       setTimeout(() => setActionFeedback(prev => { const n = { ...prev }; delete n[row.id]; return n }), 2500)
+    } catch (err) {
+      setActionFeedback(prev => ({ ...prev, [row.id]: `Error: ${err.message}` }))
     }
   }
 
   async function handleInvite(e) {
     e.preventDefault()
+    if (!org?.id) return
     setInviting(true)
     setInviteError(null)
     setInviteSuccess(null)
 
-    // Insert a profile row with no user_id (user_id assigned when they accept the invite)
-    // Note: supabase.auth.admin.inviteUserByEmail requires a service role key.
-    // We pre-create the profile so the role is assigned when they sign up.
-    const { error: err } = await supabase.from('profiles').insert({
-      org_id:    profile.org_id,
-      full_name: inviteName,
-      email:     inviteEmail,
-      role:      inviteRole,
-      commission_rate_percentage: inviteCommission,
-      is_active: true,
-      user_id:   null, // will be linked when the user accepts their invite
-    })
+    try {
+      await createOrgProfile(dataconnect, {
+        orgId: org.id,
+        fullName: inviteName,
+        email: inviteEmail,
+        role: inviteRole,
+        commissionRatePercentage: inviteCommission
+      });
 
-    setInviting(false)
-    if (err) {
-      setInviteError(err.message)
-      // Hint: inviteUserByEmail requires the Supabase service role key, not available client-side.
-      setInviteError(
-        'Invitation email will be sent via the Supabase dashboard. Save the user record to pre-assign their role. ' +
-        `(Detail: ${err.message})`
-      )
-    } else {
-      setInviteSuccess(`${inviteName} added. Send the invitation from the Supabase Auth dashboard.`)
+      setInviting(false)
+      setInviteSuccess(`${inviteName} added. They can now sign up using this email.`)
       setInviteName('')
       setInviteEmail('')
       setInviteRole('staff')
       setInviteCommission(0)
       setShowInvite(false)
       loadUsers()
+    } catch (err) {
+      setInviting(false)
+      setInviteError(err.message)
     }
   }
 
@@ -248,14 +235,14 @@ export default function UserManagement() {
             )}
             {users.map(row => (
               <tr key={row.id} className="hover:bg-white/[0.02] transition-colors">
-                <td className="px-5 py-4 text-white font-medium">{row.full_name || '—'}</td>
+                <td className="px-5 py-4 text-white font-medium">{row.fullName || '—'}</td>
                 <td className="px-5 py-4 text-gray-400">{row.email || '—'}</td>
                 <td className="px-5 py-4"><RoleBadge role={row.role} /></td>
-                <td className="px-5 py-4 text-gray-400">{row.role !== 'patient' ? `${row.commission_rate_percentage ?? 0}%` : '—'}</td>
+                <td className="px-5 py-4 text-gray-400">{row.role !== 'patient' ? `${row.commissionRatePercentage ?? 0}%` : '—'}</td>
                 <td className="px-5 py-4">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${row.is_active ? 'text-green-400' : 'text-gray-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${row.is_active ? 'bg-green-400' : 'bg-gray-600'}`} />
-                    {row.is_active ? 'Active' : 'Inactive'}
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${row.isActive ? 'text-green-400' : 'text-gray-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${row.isActive ? 'bg-green-400' : 'bg-gray-600'}`} />
+                    {row.isActive ? 'Active' : 'Inactive'}
                   </span>
                 </td>
                 <td className="px-5 py-4">
@@ -270,7 +257,7 @@ export default function UserManagement() {
                           onClick={() => handleToggleActive(row)}
                           className="px-3 py-1.5 text-xs rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors"
                         >
-                          {row.is_active ? 'Deactivate' : 'Reactivate'}
+                          {row.isActive ? 'Deactivate' : 'Reactivate'}
                         </button>
                         {row.email && (
                           <button

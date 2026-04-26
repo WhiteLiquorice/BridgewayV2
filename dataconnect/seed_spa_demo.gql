@@ -1,0 +1,126 @@
+mutation @transaction {
+  org_insert(data: {
+    id: "aaaaaaaa-0000-0000-0000-000000000001",
+    name: "Wellness Co",
+    slug: "wellness-co",
+    address: "402 Magnolia Lane, Suite 100, Nashville, TN 37201",
+    phone: "(615) 555-0142",
+    website: "https://wellnessco.com",
+    primaryColor: "#9b7561",
+    status: "active",
+    onboardingComplete: true
+  })
+
+  profile_insertMany(data: [
+    {
+      id: "bbbbbbbb-0000-0000-0000-000000000001",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      role: "staff",
+      fullName: "Margaux Delacroix",
+      email: "margaux@wellnessco.com",
+      isActive: true
+    },
+    {
+      id: "bbbbbbbb-0000-0000-0000-000000000002",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      role: "staff",
+      fullName: "Isabelle Hart",
+      email: "isabelle@wellnessco.com",
+      isActive: true
+    },
+    {
+      id: "bbbbbbbb-0000-0000-0000-000000000003",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      role: "staff",
+      fullName: "Theo Kim",
+      email: "theo@wellnessco.com",
+      isActive: true
+    }
+  ])
+
+  service_insertMany(data: [
+    {
+      id: "cccccccc-0000-0000-0000-000000000001",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Swedish Relaxation Massage",
+      description: "Gentle flowing strokes to ease tension and quiet the mind. Perfect for first-time guests.",
+      durationMinutes: 60,
+      price: 95.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000002",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Deep Tissue Therapy",
+      description: "Firm, targeted pressure to release chronic tension and restore mobility where you need it most.",
+      durationMinutes: 60,
+      price: 115.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000003",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Hot Stone Journey",
+      description: "Warm volcanic basalt stones melt tension at the deepest level. Profoundly restorative.",
+      durationMinutes: 75,
+      price: 140.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000004",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Signature Facial",
+      description: "A fully customized facial tailored to your skin's needs — cleanse, treat, and illuminate.",
+      durationMinutes: 60,
+      price: 98.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000005",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Brightening Vitamin C Facial",
+      description: "A radiance-boosting treatment rich in antioxidants for visibly luminous, even-toned skin.",
+      durationMinutes: 50,
+      price: 80.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000006",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Scalp & Tension Relief",
+      description: "A focused 30-minute ritual for the scalp, neck, and shoulders. Deeply calming.",
+      durationMinutes: 30,
+      price: 58.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000007",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Couples Retreat",
+      description: "Share a moment of peace in our private couples suite — side-by-side Swedish massage.",
+      durationMinutes: 60,
+      price: 185.0,
+      isArchived: false
+    },
+    {
+      id: "cccccccc-0000-0000-0000-000000000008",
+      orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+      name: "Detox Body Wrap",
+      description: "A full-body ritual — dry brush exfoliation, purifying mineral wrap, and a calming scalp massage.",
+      durationMinutes: 90,
+      price: 155.0,
+      isArchived: false
+    }
+  ])
+  
+  orgSetting_insert(data: {
+    orgId: "aaaaaaaa-0000-0000-0000-000000000001",
+    disabledWidgets: ["revenue", "clientRetention"],
+    bookingConfig: {
+      showProviders: true,
+      requirePhone: false,
+      welcomeText: "Welcome to Wellness Co. Rejuvenate your mind and body.",
+      confirmationText: "Your appointment has been requested. We look forward to seeing you!"
+    }
+  })
+}

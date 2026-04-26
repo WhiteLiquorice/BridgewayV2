@@ -22,7 +22,6 @@ query GetUserProfile @auth(level: USER) {
 # Get Organization Settings
 query GetOrgSettings($orgId: UUID!) @auth(level: USER) {
   orgSettings(where: { orgId: { eq: $orgId } }) {
-    id
     paymentRequired
     stripeCustomerId
     stripeSubscriptionId
@@ -30,20 +29,79 @@ query GetOrgSettings($orgId: UUID!) @auth(level: USER) {
     externalCalendarId
     externalCalendarType
     externalCalendarSyncEnabled
+    disabledWidgets
+    bookingConfig
   }
 }
 
-# Update External Calendar Settings
-mutation UpdateOrgCalendarSettings(
-  $orgId: UUID!,
-  $calendarId: String,
-  $calendarType: String,
-  $enabled: Boolean
+# Get all profiles for an organization
+query GetOrgProfiles($orgId: UUID!) @auth(level: USER) {
+  profiles(where: { orgId: { eq: $orgId } }, orderBy: [{ fullName: ASC }]) {
+    id
+    userId
+    role
+    fullName
+    email
+    phone
+    isActive
+    commissionRatePercentage
+  }
+}
+
+# Update a profile's active status
+mutation UpdateProfileStatus($id: UUID!, $isActive: Boolean!) @auth(level: USER) {
+  profile_update(key: { id: $id }, data: { isActive: $isActive })
+}
+
+# Create a new profile (usually for invites)
+mutation CreateOrgProfile($orgId: UUID!, $fullName: String!, $email: String!, $role: String!, $commissionRatePercentage: Int!) @auth(level: USER) {
+  profile_insert(data: {
+    orgId: $orgId,
+    fullName: $fullName,
+    email: $email,
+    role: $role,
+    commissionRatePercentage: $commissionRatePercentage,
+    isActive: true
+  })
+}
+
+# Update organization branding and core info
+mutation UpdateOrgBranding(
+  $id: UUID!,
+  $name: String!,
+  $address: String,
+  $phone: String,
+  $website: String,
+  $primaryColor: String,
+  $secondaryColor: String,
+  $logoUrl: String,
+  $layoutTheme: String,
+  $appTheme: String,
+  $sessionTimeoutAdminMin: Int,
+  $sessionTimeoutManagerMin: Int,
+  $sessionTimeoutStaffMin: Int
 ) @auth(level: USER) {
+  org_update(key: { id: $id }, data: {
+    name: $name,
+    address: $address,
+    phone: $phone,
+    website: $website,
+    primaryColor: $primaryColor,
+    secondaryColor: $secondaryColor,
+    logoUrl: $logoUrl,
+    layoutTheme: $layoutTheme,
+    appTheme: $appTheme,
+    sessionTimeoutAdminMin: $sessionTimeoutAdminMin,
+    sessionTimeoutManagerMin: $sessionTimeoutManagerMin,
+    sessionTimeoutStaffMin: $sessionTimeoutStaffMin
+  })
+}
+
+# Update organization settings (widgets and booking config)
+mutation UpdateOrgSettings($orgId: UUID!, $disabledWidgets: Any, $bookingConfig: Any) @auth(level: USER) {
   orgSetting_upsert(data: {
     orgId: $orgId,
-    externalCalendarId: $calendarId,
-    externalCalendarType: $calendarType,
-    externalCalendarSyncEnabled: $enabled
+    disabledWidgets: $disabledWidgets,
+    bookingConfig: $bookingConfig
   })
 }

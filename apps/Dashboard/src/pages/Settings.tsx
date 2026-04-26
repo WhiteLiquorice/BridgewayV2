@@ -322,7 +322,7 @@ export default function Settings() {
                 type="text"
                 value={orgName}
                 onChange={e => setOrgName(e.target.value)}
-                placeholder="Bridgeway Chiropractic"
+                placeholder="Wellness Co"
                 className={inputCls}
               />
             </Field>

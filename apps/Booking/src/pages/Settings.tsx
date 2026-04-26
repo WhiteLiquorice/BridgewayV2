@@ -213,7 +213,7 @@ export default function Settings() {
               label="Business Name"
               value={profileForm.business_name}
               onChange={e => setProfileForm(f => ({ ...f, business_name: e.target.value }))}
-              placeholder="Riverside Med Spa"
+              placeholder="Wellness Co"
             />
           </div>
           <div className="sm:col-span-2">
