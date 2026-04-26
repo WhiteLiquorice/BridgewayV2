@@ -1,0 +1,10 @@
+{
+  "name": "@bridgeway/database",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bridgeway/database": "file:src/generated",
+    "firebase": "^10.11.0"
+  }
+}

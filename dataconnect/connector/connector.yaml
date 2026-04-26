@@ -1,0 +1,7 @@
+connectorId: "default"
+authMode: "PUBLIC" # We will implement custom auth logic in queries
+generate:
+  javascriptSdk:
+    outputDir: "../../packages/database/src/generated"
+    package: "@bridgeway/database"
+    packageJsonDir: "../../packages/database"

@@ -1,0 +1,12 @@
+specVersion: "v1"
+serviceId: "bridgeway-db"
+location: "us-central1"
+schemas:
+  - source: "./schema"
+    datasource:
+      postgresql:
+        database: "fdcdb"
+        cloudSql:
+          instanceId: "bridgeway-db-fdc"
+          # schemaValidation: "STRICT"
+connectorDirs: ["./connector"]

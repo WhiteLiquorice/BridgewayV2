@@ -1,0 +1,349 @@
+type Org @table {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  slug: String @unique
+  address: String
+  phone: String
+  website: String
+  logoUrl: String
+  primaryColor: String @default(value: "#f59e0b")
+  subscriptionTier: String @default(value: "base")
+  sessionTimeoutAdminMin: Int @default(value: 480)
+  sessionTimeoutManagerMin: Int @default(value: 480)
+  sessionTimeoutStaffMin: Int @default(value: 30)
+  sessionTimeoutPatientMin: Int @default(value: 480)
+  patientCheckinEnabled: Boolean @default(value: true)
+  onboardingComplete: Boolean @default(value: false)
+  status: String @default(value: "active")
+  stripePublishableKey: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Profile @table {
+  id: UUID! @default(expr: "uuidV4()")
+  userId: String @unique
+  org: Org!
+  role: String! @default(value: "staff")
+  fullName: String
+  email: String
+  phone: String
+  commission_rate_percentage: Int @default(value: 0)
+  isActive: Boolean @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Client @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  name: String!
+  email: String
+  phone: String
+  dateOfBirth: Date
+  address: String
+  notes: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Service @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  name: String!
+  description: String
+  durationMinutes: Int @default(value: 60)
+  price: Float @default(value: 0)
+  isArchived: Boolean @default(value: false)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Appointment @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  client: Client
+  service: Service
+  staff: Profile
+  scheduledAt: Timestamp!
+  durationMinutes: Int @default(value: 60)
+  status: String! @default(value: "confirmed")
+  amount: Float @default(value: 0)
+  commissionAmount: Float @default(value: 0)
+  notes: String
+  cancellationReason: String
+  cancellationNotes: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Slot @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  staff: Profile
+  startTime: Timestamp!
+  endTime: Timestamp!
+  status: String! @default(value: "available")
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Booking @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  service: Service
+  slot: Slot
+  appointment: Appointment
+  name: String!
+  email: String
+  phone: String
+  preferredDate: Date
+  preferredTime: String
+  notes: String
+  status: String! @default(value: "pending")
+  paymentStatus: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Class @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  name: String!
+  description: String
+  instructor: Profile
+  service: Service
+  dayOfWeek: Int!
+  startTime: String!
+  durationMinutes: Int @default(value: 60)
+  capacity: Int @default(value: 10)
+  location: String
+  isActive: Boolean @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type ClassRegistration @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  classEntity: Class!
+  client: Client!
+  classDate: Date!
+  status: String! @default(value: "registered")
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type QueueEntry @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  client: Client
+  clientName: String!
+  service: Service
+  staff: Profile
+  status: String! @default(value: "waiting")
+  position: Int! @default(value: 0)
+  notes: String
+  joinedAt: Timestamp! @default(expr: "request.time")
+  calledAt: Timestamp
+  completedAt: Timestamp
+}
+
+type ClientPackage @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  client: Client!
+  template: PackageTemplate
+  name: String!
+  totalSessions: Int! @default(value: 1)
+  usedSessions: Int! @default(value: 0)
+  price: Float @default(value: 0)
+  purchasedAt: Timestamp! @default(expr: "request.time")
+  expiresAt: Timestamp
+  status: String! @default(value: "active")
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Product @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  name: String!
+  priceCents: Int!
+  stockCount: Int
+  isActive: Boolean @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type PosTransaction @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  client: Client
+  staff: Profile
+  items: Any! # Using Any for JSONB
+  tipCents: Int @default(value: 0)
+  totalCents: Int!
+  commission_amount: Float @default(value: 0)
+  stripePaymentIntentId: String
+  status: String @default(value: "pending")
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type OrgSetting @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org! @unique
+  stripeSecretKey: String
+  paymentRequired: Boolean @default(value: false)
+  stripeCustomerId: String
+  stripeSubscriptionId: String
+  paymentPastDue: Boolean @default(value: false)
+  externalCalendarId: String
+  externalCalendarType: String # e.g. 'google', 'outlook'
+  externalCalendarSyncEnabled: Boolean @default(value: false)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type PackageTemplate @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  service: Service
+  name: String!
+  type: String!
+  sessionCount: Int
+  price: Float!
+  billingInterval: String
+  expiryDays: Int
+  isActive: Boolean @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type StaffShift @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  staff: Profile!
+  shiftDate: Date!
+  startTime: String!
+  endTime: String!
+  notes: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Document @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  client: Client
+  title: String!
+  fileUrl: String!
+  uploadedBy: Profile
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Announcement @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  message: String!
+  postedBy: Profile
+  postedAt: Timestamp! @default(expr: "request.time")
+}
+
+type WidgetConfig @table {
+  id: UUID! @default(expr: "uuidV4()")
+  userId: String! @unique
+  org: Org!
+  config: Any! # Using Any for JSONB
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type NotificationSetting @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org! @unique
+  smsEnabled: Boolean @default(value: false)
+  emailEnabled: Boolean @default(value: true)
+  smsConfirmed: Boolean @default(value: true)
+  emailConfirmed: Boolean @default(value: true)
+  smsCancelled: Boolean @default(value: true)
+  emailCancelled: Boolean @default(value: true)
+  reminder24h: Boolean @default(value: true)
+  reminder2h: Boolean @default(value: true)
+  notifyNewBooking: Boolean @default(value: true)
+  cancellationPolicyText: String
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+type NotificationLog @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  appointment: Appointment
+  type: String!
+  template: String!
+  recipient: String!
+  status: String! @default(value: "sent")
+  error: String
+  sentAt: Timestamp! @default(expr: "request.time")
+}
+
+type ActivityLog @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  userId: String
+  action: String!
+  entityType: String
+  entityId: UUID
+  metadata: Any # JSONB
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type InAppNotification @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  type: String!
+  title: String!
+  message: String
+  link: String
+  isRead: Boolean @default(value: false)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type IntakeFormTemplate @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  name: String!
+  fields: Any! # JSONB
+  isActive: Boolean @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type IntakeFormSubmission @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  form: IntakeFormTemplate!
+  client: Client
+  appointment: Appointment
+  responses: Any! # JSONB
+  submittedAt: Timestamp! @default(expr: "request.time")
+}
+
+type FloorZone @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  name: String!
+  capacity: Int @default(value: 1)
+  sortOrder: Int @default(value: 0)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type SeatAssignment @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  zone: FloorZone
+  zoneName: String
+  queueEntry: QueueEntry
+  clientName: String
+  assignedAt: Timestamp! @default(expr: "request.time")
+  clearedAt: Timestamp
+}
+
+type MarketingTrigger @table {
+  id: UUID! @default(expr: "uuidV4()")
+  org: Org!
+  triggerId: String! # e.g. 'reengagement', 'review_request'
+  title: String!
+  description: String
+  channel: String! @default(value: "SMS")
+  enabled: Boolean @default(value: false)
+  delayValue: Int @default(value: 0)
+  delayUnit: String @default(value: "days")
+  message: String!
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}

@@ -1,0 +1,30 @@
+{
+  "projects": {
+    "default": "bridgeway-db29e"
+  },
+  "targets": {
+    "bridgeway-db29e": {
+      "hosting": {
+        "admin": [
+          "bridgeway-db29e-admin"
+        ],
+        "booking": [
+          "bridgeway-db29e-booking"
+        ],
+        "dashboard": [
+          "bridgeway-db29e-dashboard"
+        ],
+        "kiosk": [
+          "bridgeway-db29e-kiosk"
+        ],
+        "portal": [
+          "bridgeway-db29e-portal"
+        ],
+        "website": [
+          "bridgeway-db29e-website"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

@@ -1,0 +1,49 @@
+# Get current user profile and their org
+query GetUserProfile @auth(level: USER) {
+  profiles(where: { userId: { eq_expr: "auth.uid" } }) {
+    id
+    userId
+    role
+    fullName
+    email
+    phone
+    isActive
+    org {
+      id
+      name
+      slug
+      status
+      subscriptionTier
+      onboardingComplete
+    }
+  }
+}
+
+# Get Organization Settings
+query GetOrgSettings($orgId: UUID!) @auth(level: USER) {
+  orgSettings(where: { orgId: { eq: $orgId } }) {
+    id
+    paymentRequired
+    stripeCustomerId
+    stripeSubscriptionId
+    paymentPastDue
+    externalCalendarId
+    externalCalendarType
+    externalCalendarSyncEnabled
+  }
+}
+
+# Update External Calendar Settings
+mutation UpdateOrgCalendarSettings(
+  $orgId: UUID!,
+  $calendarId: String,
+  $calendarType: String,
+  $enabled: Boolean
+) @auth(level: USER) {
+  orgSetting_upsert(data: {
+    orgId: $orgId,
+    externalCalendarId: $calendarId,
+    externalCalendarType: $calendarType,
+    externalCalendarSyncEnabled: $enabled
+  })
+}
