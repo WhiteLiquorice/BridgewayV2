@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Montserrat', 'Inter', system-ui, sans-serif;
+    color: #1a1a1a;
+    background: #fafaf9;
+  }
+}
+
+/* ─── Animations ─────────────────────────────────────────────────────────── */
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in { animation: slideIn 0.3s ease-out; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeIn 0.35s ease-out; }
+
+@keyframes fadeInSoft {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-fade-in-soft { animation: fadeInSoft 0.45s ease-out; }
+
+@keyframes pulseArrival {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.35); }
+  50%      { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+}
+.animate-pulse-arrival { animation: pulseArrival 1.6s ease-out 2; }
+
+/* ─── Scrollbars ─────────────────────────────────────────────────────────── */
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.dark-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.dark-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+.dark-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+.luxury-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.luxury-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.06); border-radius: 3px; }
+.luxury-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.12); }

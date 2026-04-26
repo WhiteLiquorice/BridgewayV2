@@ -1,0 +1,13 @@
+{
+  "name": "bridgeway-onboarding",
+  "version": "1.0.0",
+  "description": "Bridgeway staff onboarding script — run once per new client",
+  "type": "module",
+  "scripts": {
+    "start": "node onboard-client.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "dotenv": "^16.5.0"
+  }
+}

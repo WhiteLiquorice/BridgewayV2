@@ -1,0 +1,13 @@
+{
+  "name": "Bridgeway Admin",
+  "short_name": "Admin",
+  "description": "Staff dashboard for Bridgeway practice management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1a2e",
+  "theme_color": "#0c1a2e",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
