@@ -1,18 +1,25 @@
-const { onRequest, onCall, HttpsError } = require('firebase-functions/v2/https')
-const { onDocumentUpdated }             = require('firebase-functions/v2/firestore')
-const admin                             = require('firebase-admin')
-const stripe                            = require('stripe')(process.env.STRIPE_SECRET_KEY)
-const { google }                        = require('googleapis')
+const { onRequest, onCall, HttpsError, defineSecret } = require('firebase-functions/v2/https')
+const { onDocumentUpdated }                            = require('firebase-functions/v2/firestore')
+const admin                                            = require('firebase-admin')
+const stripe                                           = require('stripe')(process.env.STRIPE_SECRET_KEY)
+const { google }                                       = require('googleapis')
+
+// ── Secret Manager bindings (production) ─────────────────────────────────────
+// Locally these fall back to the .env file in this directory.
+// In production, set them once with:
+//   npx firebase-tools secrets:set GOOGLE_CLIENT_ID
+//   npx firebase-tools secrets:set GOOGLE_CLIENT_SECRET
+const googleClientId     = defineSecret('GOOGLE_CLIENT_ID')
+const googleClientSecret = defineSecret('GOOGLE_CLIENT_SECRET')
 
 admin.initializeApp()
 const db = admin.firestore()
 
 function makeOAuth2Client(redirectUri) {
-  return new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri,
-  )
+  // defineSecret values are accessible via .value() inside a function handler
+  const clientId     = googleClientId.value()     || process.env.GOOGLE_CLIENT_ID
+  const clientSecret = googleClientSecret.value() || process.env.GOOGLE_CLIENT_SECRET
+  return new google.auth.OAuth2(clientId, clientSecret, redirectUri)
 }
 
 // ─── Stripe ───────────────────────────────────────────────────────────────────
