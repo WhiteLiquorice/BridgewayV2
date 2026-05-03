@@ -188,6 +188,7 @@ type OrgSetting @table(key: ["org"]) {
   paymentRequired: Boolean @default(value: false)
   stripeCustomerId: String
   stripeSubscriptionId: String
+  stripeAccountId: String
   paymentPastDue: Boolean @default(value: false)
   externalCalendarId: String
   externalCalendarType: String # e.g. 'google', 'outlook'

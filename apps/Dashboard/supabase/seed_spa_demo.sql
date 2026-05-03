@@ -9,7 +9,7 @@ DELETE FROM services     WHERE org_id = 'aaaaaaaa-0000-0000-0000-000000000001';
 DELETE FROM org_settings WHERE org_id = 'aaaaaaaa-0000-0000-0000-000000000001';
 DELETE FROM profiles     WHERE org_id = 'aaaaaaaa-0000-0000-0000-000000000001';
 DELETE FROM orgs         WHERE id     = 'aaaaaaaa-0000-0000-0000-000000000001';
-DELETE FROM auth.users   WHERE email  = 'owner@maisonluxespa.com';
+DELETE FROM auth.users   WHERE email  = 'owner@wellnessco.com';
 
 -- ── 1. Ensure columns exist ───────────────────────────────────────────────────
 ALTER TABLE orgs   ADD COLUMN IF NOT EXISTS status              text    DEFAULT 'active' CHECK (status IN ('active','inactive'));
@@ -36,7 +36,7 @@ VALUES (
   'active', true, 'minimal', 'luxury'
 );
 
--- ── 3. Auth user (owner login: owner@maisonluxespa.com / SpaDemo2026!) ────────
+-- ── 3. Auth user (owner login: owner@wellnessco.com / SpaDemo2026!) ────────
 -- Pass org_id + role in metadata so handle_new_user() trigger creates the
 -- profile correctly — no manual profile insert needed for the owner.
 INSERT INTO auth.users (

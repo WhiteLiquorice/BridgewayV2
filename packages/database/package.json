@@ -14,6 +14,7 @@
     }
   },
   "dependencies": {
+    "@bridgeway/database": "file:src/generated",
     "firebase": "^12.12.1"
   }
 }

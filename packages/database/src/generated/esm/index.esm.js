@@ -92,3 +92,39 @@ export function updateOrgSettings(dcOrVars, vars) {
   return executeMutation(updateOrgSettingsRef(dcInstance, inputVars));
 }
 
+export const createOrgRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'CreateOrg', inputVars);
+}
+createOrgRef.operationName = 'CreateOrg';
+
+export function createOrg(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createOrgRef(dcInstance, inputVars));
+}
+
+export const provisionProfileRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'ProvisionProfile', inputVars);
+}
+provisionProfileRef.operationName = 'ProvisionProfile';
+
+export function provisionProfile(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(provisionProfileRef(dcInstance, inputVars));
+}
+
+export const provisionOrgSettingRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'ProvisionOrgSetting', inputVars);
+}
+provisionOrgSettingRef.operationName = 'ProvisionOrgSetting';
+
+export function provisionOrgSetting(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(provisionOrgSettingRef(dcInstance, inputVars));
+}
+

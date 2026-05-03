@@ -16,6 +16,9 @@ This README will guide you through the process of using the generated JavaScript
   - [*CreateOrgProfile*](#createorgprofile)
   - [*UpdateOrgBranding*](#updateorgbranding)
   - [*UpdateOrgSettings*](#updateorgsettings)
+  - [*CreateOrg*](#createorg)
+  - [*ProvisionProfile*](#provisionprofile)
+  - [*ProvisionOrgSetting*](#provisionorgsetting)
 
 # Accessing the connector
 A connector is a collection of Queries and Mutations. One SDK is generated for each connector - this SDK is generated for the connector `default`. You can find more information about connectors in the [Data Connect documentation](https://firebase.google.com/docs/data-connect#how-does).
@@ -900,6 +903,360 @@ const ref = updateOrgSettingsRef({ orgId: ..., disabledWidgets: ..., bookingConf
 // You can also pass in a `DataConnect` instance to the `MutationRef` function.
 const dataConnect = getDataConnect(connectorConfig);
 const ref = updateOrgSettingsRef(dataConnect, updateOrgSettingsVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.orgSetting_upsert);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.orgSetting_upsert);
+});
+```
+
+## CreateOrg
+You can execute the `CreateOrg` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+createOrg(vars: CreateOrgVariables): MutationPromise<CreateOrgData, CreateOrgVariables>;
+
+interface CreateOrgRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateOrgVariables): MutationRef<CreateOrgData, CreateOrgVariables>;
+}
+export const createOrgRef: CreateOrgRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+createOrg(dc: DataConnect, vars: CreateOrgVariables): MutationPromise<CreateOrgData, CreateOrgVariables>;
+
+interface CreateOrgRef {
+  ...
+  (dc: DataConnect, vars: CreateOrgVariables): MutationRef<CreateOrgData, CreateOrgVariables>;
+}
+export const createOrgRef: CreateOrgRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the createOrgRef:
+```typescript
+const name = createOrgRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `CreateOrg` mutation requires an argument of type `CreateOrgVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface CreateOrgVariables {
+  name: string;
+  subscriptionTier: string;
+  stripePublishableKey?: string | null;
+  email: string;
+}
+```
+### Return Type
+Recall that executing the `CreateOrg` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `CreateOrgData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface CreateOrgData {
+  org_insert: Org_Key;
+}
+```
+### Using `CreateOrg`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, createOrg, CreateOrgVariables } from '@bridgeway/database';
+
+// The `CreateOrg` mutation requires an argument of type `CreateOrgVariables`:
+const createOrgVars: CreateOrgVariables = {
+  name: ..., 
+  subscriptionTier: ..., 
+  stripePublishableKey: ..., // optional
+  email: ..., 
+};
+
+// Call the `createOrg()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await createOrg(createOrgVars);
+// Variables can be defined inline as well.
+const { data } = await createOrg({ name: ..., subscriptionTier: ..., stripePublishableKey: ..., email: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await createOrg(dataConnect, createOrgVars);
+
+console.log(data.org_insert);
+
+// Or, you can use the `Promise` API.
+createOrg(createOrgVars).then((response) => {
+  const data = response.data;
+  console.log(data.org_insert);
+});
+```
+
+### Using `CreateOrg`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, createOrgRef, CreateOrgVariables } from '@bridgeway/database';
+
+// The `CreateOrg` mutation requires an argument of type `CreateOrgVariables`:
+const createOrgVars: CreateOrgVariables = {
+  name: ..., 
+  subscriptionTier: ..., 
+  stripePublishableKey: ..., // optional
+  email: ..., 
+};
+
+// Call the `createOrgRef()` function to get a reference to the mutation.
+const ref = createOrgRef(createOrgVars);
+// Variables can be defined inline as well.
+const ref = createOrgRef({ name: ..., subscriptionTier: ..., stripePublishableKey: ..., email: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = createOrgRef(dataConnect, createOrgVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.org_insert);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.org_insert);
+});
+```
+
+## ProvisionProfile
+You can execute the `ProvisionProfile` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+provisionProfile(vars: ProvisionProfileVariables): MutationPromise<ProvisionProfileData, ProvisionProfileVariables>;
+
+interface ProvisionProfileRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: ProvisionProfileVariables): MutationRef<ProvisionProfileData, ProvisionProfileVariables>;
+}
+export const provisionProfileRef: ProvisionProfileRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+provisionProfile(dc: DataConnect, vars: ProvisionProfileVariables): MutationPromise<ProvisionProfileData, ProvisionProfileVariables>;
+
+interface ProvisionProfileRef {
+  ...
+  (dc: DataConnect, vars: ProvisionProfileVariables): MutationRef<ProvisionProfileData, ProvisionProfileVariables>;
+}
+export const provisionProfileRef: ProvisionProfileRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the provisionProfileRef:
+```typescript
+const name = provisionProfileRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `ProvisionProfile` mutation requires an argument of type `ProvisionProfileVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface ProvisionProfileVariables {
+  userId: string;
+  orgId: UUIDString;
+  fullName: string;
+  email: string;
+  role: string;
+}
+```
+### Return Type
+Recall that executing the `ProvisionProfile` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `ProvisionProfileData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface ProvisionProfileData {
+  profile_insert: Profile_Key;
+}
+```
+### Using `ProvisionProfile`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, provisionProfile, ProvisionProfileVariables } from '@bridgeway/database';
+
+// The `ProvisionProfile` mutation requires an argument of type `ProvisionProfileVariables`:
+const provisionProfileVars: ProvisionProfileVariables = {
+  userId: ..., 
+  orgId: ..., 
+  fullName: ..., 
+  email: ..., 
+  role: ..., 
+};
+
+// Call the `provisionProfile()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await provisionProfile(provisionProfileVars);
+// Variables can be defined inline as well.
+const { data } = await provisionProfile({ userId: ..., orgId: ..., fullName: ..., email: ..., role: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await provisionProfile(dataConnect, provisionProfileVars);
+
+console.log(data.profile_insert);
+
+// Or, you can use the `Promise` API.
+provisionProfile(provisionProfileVars).then((response) => {
+  const data = response.data;
+  console.log(data.profile_insert);
+});
+```
+
+### Using `ProvisionProfile`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, provisionProfileRef, ProvisionProfileVariables } from '@bridgeway/database';
+
+// The `ProvisionProfile` mutation requires an argument of type `ProvisionProfileVariables`:
+const provisionProfileVars: ProvisionProfileVariables = {
+  userId: ..., 
+  orgId: ..., 
+  fullName: ..., 
+  email: ..., 
+  role: ..., 
+};
+
+// Call the `provisionProfileRef()` function to get a reference to the mutation.
+const ref = provisionProfileRef(provisionProfileVars);
+// Variables can be defined inline as well.
+const ref = provisionProfileRef({ userId: ..., orgId: ..., fullName: ..., email: ..., role: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = provisionProfileRef(dataConnect, provisionProfileVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.profile_insert);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.profile_insert);
+});
+```
+
+## ProvisionOrgSetting
+You can execute the `ProvisionOrgSetting` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+provisionOrgSetting(vars: ProvisionOrgSettingVariables): MutationPromise<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+
+interface ProvisionOrgSettingRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: ProvisionOrgSettingVariables): MutationRef<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+}
+export const provisionOrgSettingRef: ProvisionOrgSettingRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+provisionOrgSetting(dc: DataConnect, vars: ProvisionOrgSettingVariables): MutationPromise<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+
+interface ProvisionOrgSettingRef {
+  ...
+  (dc: DataConnect, vars: ProvisionOrgSettingVariables): MutationRef<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+}
+export const provisionOrgSettingRef: ProvisionOrgSettingRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the provisionOrgSettingRef:
+```typescript
+const name = provisionOrgSettingRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `ProvisionOrgSetting` mutation requires an argument of type `ProvisionOrgSettingVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface ProvisionOrgSettingVariables {
+  orgId: UUIDString;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+}
+```
+### Return Type
+Recall that executing the `ProvisionOrgSetting` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `ProvisionOrgSettingData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface ProvisionOrgSettingData {
+  orgSetting_upsert: OrgSetting_Key;
+}
+```
+### Using `ProvisionOrgSetting`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, provisionOrgSetting, ProvisionOrgSettingVariables } from '@bridgeway/database';
+
+// The `ProvisionOrgSetting` mutation requires an argument of type `ProvisionOrgSettingVariables`:
+const provisionOrgSettingVars: ProvisionOrgSettingVariables = {
+  orgId: ..., 
+  stripeCustomerId: ..., 
+  stripeSubscriptionId: ..., 
+};
+
+// Call the `provisionOrgSetting()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await provisionOrgSetting(provisionOrgSettingVars);
+// Variables can be defined inline as well.
+const { data } = await provisionOrgSetting({ orgId: ..., stripeCustomerId: ..., stripeSubscriptionId: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await provisionOrgSetting(dataConnect, provisionOrgSettingVars);
+
+console.log(data.orgSetting_upsert);
+
+// Or, you can use the `Promise` API.
+provisionOrgSetting(provisionOrgSettingVars).then((response) => {
+  const data = response.data;
+  console.log(data.orgSetting_upsert);
+});
+```
+
+### Using `ProvisionOrgSetting`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, provisionOrgSettingRef, ProvisionOrgSettingVariables } from '@bridgeway/database';
+
+// The `ProvisionOrgSetting` mutation requires an argument of type `ProvisionOrgSettingVariables`:
+const provisionOrgSettingVars: ProvisionOrgSettingVariables = {
+  orgId: ..., 
+  stripeCustomerId: ..., 
+  stripeSubscriptionId: ..., 
+};
+
+// Call the `provisionOrgSettingRef()` function to get a reference to the mutation.
+const ref = provisionOrgSettingRef(provisionOrgSettingVars);
+// Variables can be defined inline as well.
+const ref = provisionOrgSettingRef({ orgId: ..., stripeCustomerId: ..., stripeSubscriptionId: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = provisionOrgSettingRef(dataConnect, provisionOrgSettingVars);
 
 // Call `executeMutation()` on the reference to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.

@@ -3,7 +3,8 @@ import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useTerminology } from '../context/TerminologyContext'
 import { supabase } from '../lib/supabase'
-
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../lib/firebase'
 function Section({ title, children }) {
   return (
     <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl overflow-hidden">
@@ -208,6 +209,33 @@ export default function Settings() {
     }
   }
 
+  // ── Stripe Connect ────────────────────────────────────────────────────────────
+  const [stripeLoading, setStripeLoading] = useState(false)
+  const [stripeError, setStripeError] = useState('')
+
+  async function connectStripe() {
+    setStripeLoading(true)
+    setStripeError('')
+    try {
+      const createStripeConnectAccount = httpsCallable(functions, 'createStripeConnectAccount')
+      const result = await createStripeConnectAccount({
+        orgId: org.id,
+        returnUrl: window.location.href,
+        refreshUrl: window.location.href,
+      })
+      await supabase
+        .from('org_settings')
+        .upsert({ org_id: org.id, stripe_account_id: result.data.accountId }, { onConflict: 'org_id' })
+        
+      window.location.href = result.data.url
+    } catch (err) {
+      console.error(err)
+      setStripeError('Failed to connect to Stripe. Please try again.')
+    } finally {
+      setStripeLoading(false)
+    }
+  }
+
   // Wait for context to arrive (AuthContext handles the spinner until then)
   if (!profile || !org) {
     return (
@@ -328,6 +356,25 @@ export default function Settings() {
             </Field>
             <SaveButton loading={orgLoading} saved={orgSaved} saveError={orgError} />
           </form>
+        </Section>
+      )}
+
+      {/* Stripe Connect — admin/manager only */}
+      {canEdit && (
+        <Section title="Payments & Billing">
+          <div className="space-y-3">
+            <p className="text-sm text-gray-400">
+              Connect your Stripe account to securely accept payments, collect deposits, and charge no-show fees directly through the booking portal.
+            </p>
+            {stripeError && <p className="text-sm text-red-400">{stripeError}</p>}
+            <button
+              onClick={connectStripe}
+              disabled={stripeLoading}
+              className="px-4 py-2 bg-[#635BFF] hover:bg-[#5851df] text-white text-sm font-semibold rounded-lg disabled:opacity-50 transition-colors flex items-center gap-2"
+            >
+              {stripeLoading ? 'Connecting...' : 'Set up payments with Stripe'}
+            </button>
+          </div>
         </Section>
       )}
 

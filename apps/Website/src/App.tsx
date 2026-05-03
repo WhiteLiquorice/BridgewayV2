@@ -149,7 +149,7 @@ function DemoBanner({ onGetStarted }) {
             const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             const adminUrl = isLocal
               ? 'http://localhost:5177/?demo=true'
-              : 'https://bridgeway-db29e-admin.web.app/?demo=true';
+              : 'https://admin.bridgewayapps.com/?demo=true';
             window.location.href = adminUrl;
           }}
           className="text-xs font-semibold text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/10 px-3 py-1 rounded transition-colors"
@@ -161,7 +161,7 @@ function DemoBanner({ onGetStarted }) {
             const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             const dashUrl = isLocal
               ? 'http://localhost:5173/?demo=true'
-              : 'https://bridgeway-db29e-dashboard.web.app/?demo=true';
+              : 'https://dashboard.bridgewayapps.com/?demo=true';
             window.location.href = dashUrl;
           }}
           className="text-xs font-semibold text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 px-3 py-1 rounded transition-colors"

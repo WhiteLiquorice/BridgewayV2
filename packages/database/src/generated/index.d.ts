@@ -50,6 +50,10 @@ export interface Client_Key {
   __typename?: 'Client_Key';
 }
 
+export interface CreateOrgData {
+  org_insert: Org_Key;
+}
+
 export interface CreateOrgProfileData {
   profile_insert: Profile_Key;
 }
@@ -60,6 +64,13 @@ export interface CreateOrgProfileVariables {
   email: string;
   role: string;
   commissionRatePercentage: number;
+}
+
+export interface CreateOrgVariables {
+  name: string;
+  subscriptionTier: string;
+  stripePublishableKey?: string | null;
+  email: string;
 }
 
 export interface Document_Key {
@@ -185,6 +196,28 @@ export interface Product_Key {
 export interface Profile_Key {
   id: UUIDString;
   __typename?: 'Profile_Key';
+}
+
+export interface ProvisionOrgSettingData {
+  orgSetting_upsert: OrgSetting_Key;
+}
+
+export interface ProvisionOrgSettingVariables {
+  orgId: UUIDString;
+  stripeCustomerId: string;
+  stripeSubscriptionId: string;
+}
+
+export interface ProvisionProfileData {
+  profile_insert: Profile_Key;
+}
+
+export interface ProvisionProfileVariables {
+  userId: string;
+  orgId: UUIDString;
+  fullName: string;
+  email: string;
+  role: string;
 }
 
 export interface QueueEntry_Key {
@@ -339,4 +372,40 @@ export const updateOrgSettingsRef: UpdateOrgSettingsRef;
 
 export function updateOrgSettings(vars: UpdateOrgSettingsVariables): MutationPromise<UpdateOrgSettingsData, UpdateOrgSettingsVariables>;
 export function updateOrgSettings(dc: DataConnect, vars: UpdateOrgSettingsVariables): MutationPromise<UpdateOrgSettingsData, UpdateOrgSettingsVariables>;
+
+interface CreateOrgRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateOrgVariables): MutationRef<CreateOrgData, CreateOrgVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateOrgVariables): MutationRef<CreateOrgData, CreateOrgVariables>;
+  operationName: string;
+}
+export const createOrgRef: CreateOrgRef;
+
+export function createOrg(vars: CreateOrgVariables): MutationPromise<CreateOrgData, CreateOrgVariables>;
+export function createOrg(dc: DataConnect, vars: CreateOrgVariables): MutationPromise<CreateOrgData, CreateOrgVariables>;
+
+interface ProvisionProfileRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: ProvisionProfileVariables): MutationRef<ProvisionProfileData, ProvisionProfileVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: ProvisionProfileVariables): MutationRef<ProvisionProfileData, ProvisionProfileVariables>;
+  operationName: string;
+}
+export const provisionProfileRef: ProvisionProfileRef;
+
+export function provisionProfile(vars: ProvisionProfileVariables): MutationPromise<ProvisionProfileData, ProvisionProfileVariables>;
+export function provisionProfile(dc: DataConnect, vars: ProvisionProfileVariables): MutationPromise<ProvisionProfileData, ProvisionProfileVariables>;
+
+interface ProvisionOrgSettingRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: ProvisionOrgSettingVariables): MutationRef<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: ProvisionOrgSettingVariables): MutationRef<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+  operationName: string;
+}
+export const provisionOrgSettingRef: ProvisionOrgSettingRef;
+
+export function provisionOrgSetting(vars: ProvisionOrgSettingVariables): MutationPromise<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+export function provisionOrgSetting(dc: DataConnect, vars: ProvisionOrgSettingVariables): MutationPromise<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
 

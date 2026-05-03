@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
  * Admins see a direct link to the Billing page.
  */
 export default function Paywall() {
-  const { profile, signOut } = useAuth()
+  const { profile, org, signOut } = useAuth()
   const isAdmin = profile?.role === 'admin'
 
   function handleSignOut() {
@@ -24,11 +24,19 @@ export default function Paywall() {
           </svg>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Subscription Inactive</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">
+          {org?.subscriptionTier === 'booking-only' && org?.status !== 'inactive' 
+            ? 'Full Service Upgrade Required' 
+            : 'Subscription Inactive'}
+        </h1>
         <p className="text-gray-400 mb-8 leading-relaxed">
-          {isAdmin
-            ? 'Your organization\'s subscription has lapsed or a payment has failed. Update your billing details to restore access.'
-            : 'Your organization\'s subscription is currently inactive. Please contact your administrator to restore access.'}
+          {org?.subscriptionTier === 'booking-only' && org?.status !== 'inactive'
+            ? isAdmin 
+                ? 'Your organization is currently on the Booking Only plan. Upgrade to the Full Service plan to access the Dashboard features.'
+                : 'Your organization is on the Booking Only plan and does not have access to the Dashboard. Please contact your administrator.'
+            : isAdmin
+                ? 'Your organization\'s subscription has lapsed or a payment has failed. Update your billing details to restore access.'
+                : 'Your organization\'s subscription is currently inactive. Please contact your administrator to restore access.'}
         </p>
 
         <div className="flex flex-col gap-3">

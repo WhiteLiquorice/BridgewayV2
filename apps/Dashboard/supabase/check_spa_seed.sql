@@ -6,7 +6,7 @@ SELECT
 
 -- Show the auth user that was created
 SELECT id, email, email_confirmed_at IS NOT NULL AS confirmed
-  FROM auth.users WHERE email = 'owner@maisonluxespa.com';
+  FROM auth.users WHERE email = 'owner@wellnessco.com';
 
 -- Show profiles
 SELECT id, user_id, role, full_name FROM profiles

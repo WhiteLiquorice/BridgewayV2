@@ -1,3 +1,4 @@
+/** Cache-buster: 2026-04-27-2000 */
 import { useState, useEffect, useRef } from 'react'
 import { auth } from '@bridgeway/ui';
 // ═════════════════════════════════════════════════════════════════════════════
@@ -149,7 +150,7 @@ function LuxurySidebar({ activePage, setActivePage }: { activePage: PageId; setA
               const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
               const adminUrl = isLocal
                 ? 'http://localhost:5177/?demo=true'
-                : 'https://bridgeway-db29e-admin.web.app/?demo=true';
+                : 'https://admin.bridgewayapps.com/?demo=true';
               window.location.href = adminUrl;
             }}
             className="w-full text-[13px] font-medium text-white bg-indigo-600 rounded-xl py-3 hover:bg-indigo-500 transition-colors shadow-sm"
@@ -162,7 +163,7 @@ function LuxurySidebar({ activePage, setActivePage }: { activePage: PageId; setA
               const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
               const dashUrl = isLocal
                 ? 'http://localhost:5173/?demo=true'
-                : 'https://bridgeway-db29e-dashboard.web.app/?demo=true';
+                : 'https://dashboard.bridgewayapps.com/?demo=true';
               window.location.href = dashUrl;
             }}
             className="w-full text-[13px] font-medium text-white bg-amber-500 rounded-xl py-3 hover:bg-amber-600 transition-colors shadow-sm"
@@ -977,7 +978,8 @@ function PricingSection() {
       const result = await createCheckoutSession({
         email: form.email.trim(), 
         orgName: form.practice.trim(), 
-        priceId: selectedPlan === 'booking' ? priceBooking : priceFull 
+        priceId: selectedPlan === 'booking' ? priceBooking : priceFull,
+        subscriptionTier: selectedPlan === 'booking' ? 'booking-only' : 'full-stack'
       })
       
       const data = result.data as { url?: string }

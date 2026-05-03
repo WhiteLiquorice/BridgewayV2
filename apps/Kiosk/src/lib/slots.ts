@@ -1,36 +1,27 @@
 /**
+ * Kiosk slot utilities — re-exports smart scheduling from shared package
+ * and provides kiosk-specific helpers.
+ */
+import { generateSlots as generateSmartSlots } from '@bridgeway/scheduling'
+
+/**
  * Generate available appointment slots for a given date.
- * Excludes times already booked and times in the past.
+ * Now uses the shared smart scheduling engine for gap management.
  */
 export function generateSlots(hoursStart, hoursEnd, durationMins, existingBookings, date) {
-  const slots = []
-  const [startH, startM] = hoursStart.split(':').map(Number)
-  const [endH, endM]     = hoursEnd.split(':').map(Number)
-  const now = new Date()
-
-  let cur = new Date(date)
-  cur.setHours(startH, startM, 0, 0)
-  const end = new Date(date)
-  end.setHours(endH, endM, 0, 0)
-
-  while (cur < end) {
-    const slotEnd = new Date(cur.getTime() + durationMins * 60000)
-    if (slotEnd > end) break
-
-    // Skip past times
-    if (cur > now) {
-      const overlaps = existingBookings.some(b => {
-        const bStart = new Date(b.scheduled_at)
-        const bEnd   = new Date(bStart.getTime() + (b.services?.duration_minutes || durationMins) * 60000)
-        return cur < bEnd && slotEnd > bStart
-      })
-      if (!overlaps) {
-        slots.push(new Date(cur))
-      }
-    }
-    cur = new Date(cur.getTime() + durationMins * 60000)
-  }
-  return slots
+  const dateStr = typeof date === 'string' ? date : toLocalDateString(date)
+  const results = generateSmartSlots(
+    hoursStart,
+    hoursEnd,
+    durationMins,
+    existingBookings,
+    [],
+    dateStr,
+    0, // Kiosk is in-person, no lead time needed
+    { smartGapEnabled: true, minGapMinutes: 30, slotInterval: 15 }
+  )
+  // Kiosk consumers expect plain Date objects — map to match legacy interface
+  return results.map(r => r.time)
 }
 
 export function formatTime(date) {

@@ -105,3 +105,37 @@ mutation UpdateOrgSettings($orgId: UUID!, $disabledWidgets: Any, $bookingConfig:
     bookingConfig: $bookingConfig
   })
 }
+
+# Create a new organization
+mutation CreateOrg($name: String!, $subscriptionTier: String!, $stripePublishableKey: String, $email: String!) @auth(level: NO_ACCESS) {
+  org_insert(data: {
+    name: $name,
+    subscriptionTier: $subscriptionTier,
+    stripePublishableKey: $stripePublishableKey,
+    status: "active",
+    onboardingComplete: false
+  })
+}
+
+# Create a profile using explicit IDs
+mutation ProvisionProfile($userId: String!, $orgId: UUID!, $fullName: String!, $email: String!, $role: String!) @auth(level: NO_ACCESS) {
+  profile_insert(data: {
+    userId: $userId,
+    orgId: $orgId,
+    fullName: $fullName,
+    email: $email,
+    role: $role,
+    isActive: true,
+    commissionRatePercentage: 0
+  })
+}
+
+# Upsert Org Setting
+mutation ProvisionOrgSetting($orgId: UUID!, $stripeCustomerId: String!, $stripeSubscriptionId: String!) @auth(level: NO_ACCESS) {
+  orgSetting_upsert(data: {
+    orgId: $orgId,
+    paymentRequired: true,
+    stripeCustomerId: $stripeCustomerId,
+    stripeSubscriptionId: $stripeSubscriptionId
+  })
+}

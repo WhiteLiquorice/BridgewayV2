@@ -129,8 +129,8 @@ export function AuthProvider({ children }) {
 
   const setMockDemoSession = () => {
     const demoProfile = normalizeProfile({
-      id: 'demo-user',
-      userId: 'demo-user',
+      id: 'bbbbbbbb-0000-0000-0000-000000000001',
+      userId: 'bbbbbbbb-0000-0000-0000-000000000001',
       fullName: 'Demo Provider',
       email: 'demo@wellnessco.com',
       role: 'staff',

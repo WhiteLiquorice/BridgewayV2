@@ -87,12 +87,21 @@ export default function BookingsList() {
   async function handleConfirm(booking) {
     setUpdating(booking.id)
 
-    // 1. Update booking status to confirmed + set scheduledAt
+    // 1. Update booking status to confirmed + set scheduledAt + init reminder flags
     const scheduledAt = new Date(booking.preferredDate + 'T' + (booking.preferredTime || '09:00') + ':00').toISOString()
     await updateDoc(doc(db, 'bookings', booking.id), {
       status: 'confirmed',
       scheduledAt,
       confirmedAt: serverTimestamp(),
+      // Reminder flags — used by scheduled Cloud Functions to track sent state
+      reminder24hSent: false,
+      reminder2hSent:  false,
+      // Denormalised fields needed by Cloud Functions (avoid extra Firestore reads)
+      clientName:      booking.clientName  || null,
+      clientEmail:     booking.clientEmail || null,
+      clientPhone:     booking.clientPhone || null,
+      serviceName:     booking.serviceName || null,
+      durationMinutes: booking.durationMinutes || 60,
     })
 
     // 2. Fire Google Calendar event creation (non-blocking, non-fatal)

@@ -18,7 +18,9 @@ export default function ProtectedRoute() {
   // Org loads async after session — only show paywall once org is confirmed inactive.
   // While org is still null (loading), fall through and let the page render normally;
   // the paywall will appear as soon as the org row resolves.
-  if (org?.status === 'inactive') return <Paywall />
+  if (org?.status === 'inactive' || org?.subscriptionTier === 'booking-only') {
+    return <Paywall />
+  }
 
   return <Outlet />
 }

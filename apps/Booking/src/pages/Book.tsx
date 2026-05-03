@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { createMachine, assign } from 'xstate'
+import { assign, createMachine } from 'xstate'
 import { useMachine } from '@xstate/react'
 import { supabase } from '../lib/supabase'
+import { fns, storage } from '../lib/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import StripePayment from '../components/StripePayment'
+import { generateSlots } from '@bridgeway/scheduling'
 
 const STEPS_NO_PAY = ['Service', 'Date', 'Time', 'Your Info', 'Confirm']
 const STEPS_PAY = ['Service', 'Date', 'Time', 'Your Info', 'Payment', 'Confirm']
@@ -59,64 +63,8 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-function generateSlots(hoursStart, hoursEnd, serviceDuration, existingBookings, externalEvents, selectedDate, leadTimeHours) {
-  const [startH, startM] = hoursStart.split(':').map(Number)
-  const [endH, endM] = hoursEnd.split(':').map(Number)
-  const [year, month, day] = selectedDate.split('-').map(Number)
 
-  const slots = []
-  const nowPlusLead = new Date(Date.now() + leadTimeHours * 60 * 60 * 1000)
 
-  let curMinutes = startH * 60 + startM
-  const endMinutes = endH * 60 + endM
-
-  const bookedRanges = existingBookings.map(b => {
-    const s = new Date(b.scheduled_at)
-    const e = new Date(s.getTime() + (b.services?.duration_minutes || 60) * 60 * 1000)
-    return { start: s, end: e }
-  })
-
-  // Add external events to booked ranges
-  externalEvents.forEach(e => {
-    bookedRanges.push({ start: new Date(e.start), end: new Date(e.end) })
-  })
-
-  while (curMinutes + serviceDuration <= endMinutes) {
-    const slotDate = new Date(year, month - 1, day, Math.floor(curMinutes / 60), curMinutes % 60, 0, 0)
-
-    if (slotDate <= nowPlusLead) {
-      curMinutes += 30
-      continue
-    }
-
-    const slotEnd = new Date(slotDate.getTime() + serviceDuration * 60 * 1000)
-    const hasConflict = bookedRanges.some(b => slotDate < b.end && slotEnd > b.start)
-
-    if (!hasConflict) {
-      // Smart-Gap Logic
-      const isAdjacentToStartOfDay = curMinutes === startH * 60 + startM
-      const isAdjacentToEndOfDay = curMinutes + serviceDuration === endMinutes
-      const isAdjacentToBooking = bookedRanges.some(b => {
-        return Math.abs(b.end.getTime() - slotDate.getTime()) < 60000 || 
-               Math.abs(b.start.getTime() - slotEnd.getTime()) < 60000
-      })
-
-      // We only recommend it if it touches a boundary, OR if it's the very first booking of an empty day
-      const isEmptyDay = bookedRanges.length === 0
-      const recommended = isAdjacentToStartOfDay || isAdjacentToEndOfDay || isAdjacentToBooking || isEmptyDay
-
-      slots.push({
-        time: slotDate,
-        recommended
-      })
-    }
-
-    curMinutes += 30
-  }
-
-  // Sort slots so recommended ones appear first, or keep chronological? Chronological is better for UX, just highlight them.
-  return slots
-}
 
 // ─── xstate machine ───────────────────────────────────────────────────────────
 
@@ -243,11 +191,13 @@ export default function Book() {
 
   // Details form local state (validated before sending to machine)
   const [form, setForm] = useState({ name: '', email: '', phone: '', notes: '' })
+  const [referenceImage, setReferenceImage] = useState<File | null>(null)
   const [formErrors, setFormErrors] = useState({})
 
   // Submit state
   const [submitting, setSubmitting] = useState(false)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
+  const [successBooking, setSuccessBooking] = useState(null)
 
   // Progressive registration state
   const [accountMode, setAccountMode] = useState('prompt') // 'prompt' | 'create' | 'signin' | 'guest'
@@ -268,8 +218,22 @@ export default function Book() {
   useEffect(() => {
     async function init() {
       if (!orgSlug) {
+        setOrgError('No organization specified.')
         setLoadingInit(false)
         return
+      }
+
+      // If returning from Stripe success, fetch the booking data
+      if (searchParams.get('payment_success') === 'true' && searchParams.get('bookingId')) {
+        const { data: bookingData } = await supabase
+          .from('bookings')
+          .select('*, services(*)')
+          .eq('id', searchParams.get('bookingId'))
+          .single()
+        
+        if (bookingData) {
+          setSuccessBooking(bookingData)
+        }
       }
 
       const orgRes = await supabase
@@ -297,19 +261,19 @@ export default function Book() {
       setOrg(loadedOrg)
       setServices(orgServices || [])
 
-      if (loadedOrg.stripe_publishable_key) {
-        const { data: orgSettings } = await supabase
-          .from('org_settings')
-          .select('payment_required, external_calendar_sync_enabled')
-          .eq('org_id', loadedOrg.id)
-          .maybeSingle()
-        if (orgSettings?.payment_required) {
-          setPaymentRequired(true)
-        }
-        if (orgSettings?.external_calendar_sync_enabled) {
-          setExternalSyncEnabled(true)
-        }
+      const { data: orgSettings } = await supabase
+        .from('org_settings')
+        .select('payment_required, external_calendar_sync_enabled, stripe_account_id')
+        .eq('org_id', loadedOrg.id)
+        .maybeSingle()
+        
+      if (orgSettings?.payment_required) {
+        setPaymentRequired(true)
       }
+      if (orgSettings?.external_calendar_sync_enabled) {
+        setExternalSyncEnabled(true)
+      }
+      loadedOrg.stripe_account_id = orgSettings?.stripe_account_id
 
       setLoadingInit(false)
     }
@@ -350,7 +314,8 @@ export default function Book() {
       existingBookings,
       [], // Placeholder for external events from Google Calendar
       date,
-      2
+      2,
+      { smartGapEnabled: true, minGapMinutes: 30, slotInterval: 15 }
     )
     setAvailableSlots(slots)
   }, [date, service, existingBookings, org])
@@ -402,6 +367,19 @@ export default function Book() {
 
     setSubmitting(true)
 
+    let finalNotes = details.notes || null
+    if (referenceImage) {
+      try {
+        const ext = referenceImage.name.split('.').pop()
+        const storageRef = ref(storage, `booking_references/${org.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`)
+        await uploadBytes(storageRef, referenceImage)
+        const downloadUrl = await getDownloadURL(storageRef)
+        finalNotes = finalNotes ? `${finalNotes}\n\nReference Image: ${downloadUrl}` : `Reference Image: ${downloadUrl}`
+      } catch (err) {
+        console.error('Failed to upload reference image:', err)
+      }
+    }
+
     const bookingPayload = {
       org_id: org.id,
       service_id: service.id,
@@ -410,7 +388,7 @@ export default function Book() {
       phone: details.phone,
       preferred_date: date,
       preferred_time: time.toTimeString().slice(0, 5),
-      notes: details.notes || null,
+      notes: finalNotes,
       status: 'pending',
     }
     if (paymentCompleted) {
@@ -418,11 +396,33 @@ export default function Book() {
     }
     const { data, error } = await supabase.from('bookings').insert(bookingPayload).select().single()
 
-    setSubmitting(false)
-
     if (error) {
+      setSubmitting(false)
       send({ type: 'ERROR', message: error.message })
     } else {
+      // If Stripe Connect payment is required, redirect to checkout
+      if (needsPayment && org?.stripe_account_id && !paymentCompleted) {
+        try {
+          const createBookingHoldSession = httpsCallable(functions, 'createBookingHoldSession')
+          const result = await createBookingHoldSession({
+            stripeAccountId: org.stripe_account_id,
+            amount: Number(service.price) * 100, // Convert to cents
+            currency: 'usd',
+            successUrl: `${window.location.origin}${window.location.pathname}?org=${org.slug}&payment_success=true&bookingId=${data.id}`,
+            cancelUrl: window.location.href,
+            bookingDetails: { bookingId: data.id }
+          })
+          window.location.href = result.data.url
+          return
+        } catch (err) {
+          console.error('Failed to create stripe checkout session:', err)
+          setSubmitting(false)
+          send({ type: 'ERROR', message: 'Failed to initiate payment. Please try again.' })
+          return
+        }
+      }
+
+      setSubmitting(false)
       send({ type: 'CONFIRM' })
       supabase.functions.invoke('notify-new-booking', { body: { booking_id: data.id } })
         .catch(() => { /* notification failure is non-fatal */ })
@@ -488,7 +488,23 @@ export default function Book() {
   }
 
   // Success screen
-  if (state.matches('confirmed')) {
+  if (state.matches('confirmed') || successBooking) {
+    const displayService = service || successBooking?.services
+    let displayDate = 'TBD'
+    let displayTime = 'TBD'
+    
+    if (date) {
+      displayDate = formatDate(date)
+      displayTime = time ? formatTime(time) : 'TBD'
+    } else if (successBooking?.scheduled_at) {
+      const d = new Date(successBooking.scheduled_at)
+      displayDate = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+      displayTime = formatTime(d)
+    }
+
+    const displayName = details.name || successBooking?.customer_name
+    const displayEmail = details.email || successBooking?.customer_email
+
     return (
       <div className="min-h-screen bg-[#0c1a2e] flex items-center justify-center p-4">
         <div className="w-full max-w-md text-center">
@@ -503,27 +519,27 @@ export default function Book() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 text-left space-y-3 mb-8">
             <div className="flex justify-between">
               <span className="text-gray-400 text-sm">Service</span>
-              <span className="text-white text-sm font-medium">{service?.name}</span>
+              <span className="text-white text-sm font-medium">{displayService?.name}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400 text-sm">Date</span>
-              <span className="text-white text-sm font-medium">{formatDate(date)}</span>
+              <span className="text-white text-sm font-medium">{displayDate}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400 text-sm">Time</span>
-              <span className="text-white text-sm font-medium">{time && formatTime(time)}</span>
+              <span className="text-white text-sm font-medium">{displayTime}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400 text-sm">Duration</span>
-              <span className="text-white text-sm font-medium">{service?.duration_minutes} min</span>
+              <span className="text-white text-sm font-medium">{displayService?.duration_minutes} min</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400 text-sm">Name</span>
-              <span className="text-white text-sm font-medium">{details.name}</span>
+              <span className="text-white text-sm font-medium">{displayName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400 text-sm">Email</span>
-              <span className="text-white text-sm font-medium">{details.email}</span>
+              <span className="text-white text-sm font-medium">{displayEmail}</span>
             </div>
           </div>
 
@@ -634,9 +650,21 @@ export default function Book() {
         {state.matches('dateSelected') && (
           <div>
             <h2 className="text-white text-xl font-semibold mb-1">Select a Time</h2>
-            <p className="text-gray-400 text-sm mb-6">
+            <p className="text-gray-400 text-sm mb-4">
               Available slots for {formatDate(date)}
             </p>
+
+            {/* Smart scheduling info banner */}
+            {availableSlots.some(s => s.recommended) && (
+              <div className="flex items-start gap-2.5 mb-5 px-4 py-3 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                <svg className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <p className="text-xs text-amber-400/80">
+                  <span className="font-semibold text-amber-400">Smart scheduling</span> — Highlighted times maximize calendar efficiency and minimize scheduling gaps.
+                </p>
+              </div>
+            )}
 
             {availableSlots.length === 0 ? (
               <div className="text-center py-12 bg-gray-900 border border-gray-800 rounded-xl">
@@ -653,21 +681,21 @@ export default function Book() {
                       onClick={() => send({ type: 'SELECT_TIME', time: slot.time })}
                       className={`relative flex flex-col items-center justify-center py-3 px-2 rounded-xl border-2 transition-all overflow-hidden ${
                         isSelected
-                          ? 'bg-amber-500 border-amber-500 text-[#080f1d]'
+                          ? 'bg-amber-500 border-amber-500 text-[#080f1d] shadow-lg shadow-amber-500/20'
                           : slot.recommended
-                          ? 'bg-gray-800/80 border-amber-500/50 hover:border-amber-500 text-white'
+                          ? 'bg-gray-800/80 border-amber-500/50 hover:border-amber-500 text-white hover:shadow-md hover:shadow-amber-500/10'
                           : 'bg-gray-900 border-gray-800 hover:border-gray-600 text-gray-400'
                       }`}
                     >
                       {slot.recommended && !isSelected && (
-                        <div className="absolute top-0 inset-x-0 h-1 bg-amber-500/50" />
+                        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-amber-500/30 via-amber-500/60 to-amber-500/30" />
                       )}
                       <span className={`text-base font-bold ${isSelected ? 'text-[#080f1d]' : 'text-white'}`}>
                         {formatTime(slot.time)}
                       </span>
                       {slot.recommended && (
                         <span className={`text-[10px] uppercase tracking-wider font-semibold mt-1 ${isSelected ? 'text-[#080f1d]/70' : 'text-amber-500'}`}>
-                          Best Match
+                          {slot.recommendReason || 'Best match'}
                         </span>
                       )}
                     </button>
@@ -748,6 +776,25 @@ export default function Book() {
                   className="w-full bg-[#0c1a2e] border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-colors resize-none"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1.5">
+                  Reference Image <span className="text-gray-600 font-normal">(optional)</span>
+                </label>
+                <div className="w-full bg-[#0c1a2e] border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => {
+                      if (e.target.files && e.target.files[0]) {
+                        setReferenceImage(e.target.files[0])
+                      }
+                    }}
+                    className="w-full text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-amber-500/10 file:text-amber-500 hover:file:bg-amber-500/20 cursor-pointer"
+                  />
+                  {referenceImage && <p className="text-amber-400 text-xs mt-2 truncate">Selected: {referenceImage.name}</p>}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-between mt-6">
@@ -782,16 +829,30 @@ export default function Book() {
             <p className="text-gray-400 text-sm mb-6">Secure payment via Stripe</p>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-              <StripePayment
-                orgId={org.id}
-                stripePublishableKey={org.stripe_publishable_key}
-                amount={Number(service.price)}
-                onSuccess={(intentId) => {
-                  setPaymentCompleted(true)
-                  send({ type: 'PAYMENT_COMPLETE', paymentIntentId: intentId })
-                }}
-                onError={() => {}}
-              />
+              {org?.stripe_account_id ? (
+                <div className="text-center py-6">
+                  <p className="text-white mb-4">You will be redirected to Stripe to securely enter your payment details.</p>
+                  <button
+                    onClick={() => {
+                      // Proceed to confirm step which will trigger the redirect in handleSubmit
+                      send({ type: 'PAYMENT_COMPLETE', paymentIntentId: 'pending_checkout' })
+                    }}
+                    className="bg-[#635BFF] hover:bg-[#5851df] text-white font-semibold rounded-lg px-6 py-2.5 text-sm transition-colors"
+                  >
+                    Continue to Payment
+                  </button>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-amber-500 mb-4">Payment is required but this business has not connected a Stripe account.</p>
+                  <button
+                    onClick={() => send({ type: 'PAYMENT_COMPLETE', paymentIntentId: 'skipped_no_stripe' })}
+                    className="bg-amber-500 hover:bg-amber-400 text-[#080f1d] font-semibold rounded-lg px-6 py-2.5 text-sm transition-colors"
+                  >
+                    Skip Payment (Test Mode)
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between mt-6">
