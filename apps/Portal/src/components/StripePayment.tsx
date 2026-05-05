@@ -86,10 +86,14 @@ export default function StripePayment({ orgId, stripePublishableKey, amount, onS
     async function createIntent() {
       setLoading(true)
       try {
-        const { data, error: err } = await supabase.functions.invoke('create-payment-intent', {
-          body: { org_id: orgId, amount },
+        const response = await fetch(`${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || 'https://us-central1-bridgeway-apps.cloudfunctions.net'}/createPaymentIntent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { orgId, amount } })
         })
-        if (err) throw err
+        const result = await response.json()
+        if (result.error) throw new Error(result.error.message || 'Payment intent failed')
+        const data = result.result
         if (data?.clientSecret) {
           setClientSecret(data.clientSecret)
         } else if (data?.error) {

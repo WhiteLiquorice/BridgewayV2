@@ -20,6 +20,6 @@ export const functions = getFunctions(app);
 export const dataconnect = getDataConnect(app, connectorConfig);
 
 // If running in development, connect to the emulator
-if (import.meta.env.DEV) {
-  connectDataConnectEmulator(dataconnect, 'localhost', 9399);
-}
+// if (import.meta.env.DEV) {
+//   connectDataConnectEmulator(dataconnect, 'localhost', 9399);
+// }

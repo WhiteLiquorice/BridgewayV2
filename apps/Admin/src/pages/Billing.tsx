@@ -33,9 +33,9 @@ export default function Billing() {
   const [stripeCustomerId, setStripeCustomerId] = useState(null)
   const [paymentPastDue, setPaymentPastDue] = useState(false)
 
-  // Stripe keys for client payment collection (org's own Stripe)
   const [stripePk,    setStripePk]    = useState('')
   const [stripeSk,    setStripeSk]    = useState('')
+  const [stripeAccountId, setStripeAccountId] = useState(null)
   const [paymentReq,  setPaymentReq]  = useState(false)
   const [stripeSaving, setStripeSaving] = useState(false)
   const [stripeSuccess, setStripeSuccess] = useState(false)
@@ -52,7 +52,7 @@ export default function Billing() {
           supabase.from('profiles').select('id', { count: 'exact', head: true })
             .eq('org_id', profile.org_id).in('role', ['admin', 'manager', 'staff']),
           supabase.from('orgs').select('stripe_publishable_key').eq('id', profile.org_id).single(),
-          supabase.from('org_settings').select('stripe_secret_key, payment_required, stripe_customer_id, stripe_subscription_id, payment_past_due')
+          supabase.from('org_settings').select('stripe_secret_key, payment_required, stripe_customer_id, stripe_subscription_id, payment_past_due, stripe_account_id')
             .eq('org_id', profile.org_id).maybeSingle(),
         ])
         if (staffRes.error) { setError(staffRes.error.message); return }
@@ -60,6 +60,7 @@ export default function Billing() {
         if (orgRes.data?.stripe_publishable_key) setStripePk(orgRes.data.stripe_publishable_key)
         if (settingsRes.data) {
           if (settingsRes.data.stripe_secret_key) setStripeSk(settingsRes.data.stripe_secret_key)
+          setStripeAccountId(settingsRes.data.stripe_account_id ?? null)
           setPaymentReq(settingsRes.data.payment_required ?? false)
           setStripeCustomerId(settingsRes.data.stripe_customer_id ?? null)
           setPaymentPastDue(settingsRes.data.payment_past_due ?? false)
@@ -79,10 +80,8 @@ export default function Billing() {
       if (!stripeCustomerId) return
       setBillingLoading(true)
       try {
-        const { data, error: fnError } = await supabase.functions.invoke('get-billing-info', {
-          body: { stripe_customer_id: stripeCustomerId },
-        })
-        if (fnError) throw fnError
+        const getBillingInfo = httpsCallable(functions, 'getBillingInfo')
+        const { data } = await getBillingInfo({ stripe_customer_id: stripeCustomerId })
         setBillingInfo(data)
       } catch (err) {
         console.error('Failed to fetch billing info:', err)
@@ -288,36 +287,64 @@ export default function Billing() {
       {/* Stripe Connect card (org's own Stripe for collecting client payments) */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
         <h2 className="text-sm font-semibold text-white mb-1">Connect Stripe</h2>
-        <p className="text-xs text-gray-500 mb-4">Collect payments from clients at booking time.</p>
-        <form onSubmit={saveStripeKeys} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Publishable Key</label>
-            <input type="text" value={stripePk} onChange={e => setStripePk(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-brand/50"
-              placeholder="pk_live_..." />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Secret Key</label>
-            <input type="password" value={stripeSk} onChange={e => setStripeSk(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-brand/50"
-              placeholder="sk_live_..." />
-            <p className="text-xs text-gray-600 mt-1">Stored securely in org_settings. Never exposed to the frontend.</p>
-          </div>
-          <div className="flex items-center justify-between pt-2 border-t border-gray-800/60">
+        <p className="text-xs text-gray-500 mb-4">Collect payments securely from clients at booking time via Stripe Connect.</p>
+        
+        <div className="space-y-4">
+          <div className="flex items-center justify-between pt-2">
             <div>
               <p className="text-sm font-medium text-white">Require payment at booking</p>
               <p className="text-xs text-gray-500 mt-0.5">If enabled, clients must pay when booking. If disabled, payment is collected at visit.</p>
             </div>
-            <Toggle enabled={paymentReq} onChange={setPaymentReq} />
+            <Toggle enabled={paymentReq} onChange={async (val) => {
+              setPaymentReq(val)
+              await supabase.from('org_settings').upsert({
+                org_id: profile.org_id,
+                payment_required: val,
+              }, { onConflict: 'org_id' })
+            }} />
           </div>
-          <div className="flex items-center gap-3">
-            <button type="submit" disabled={stripeSaving}
-              className="px-5 py-2 bg-brand hover:bg-brand disabled:opacity-50 text-[#0c1a2e] text-sm font-semibold rounded-lg transition-colors">
-              {stripeSaving ? 'Saving...' : 'Save Stripe Settings'}
+          <div className="flex items-center justify-between pt-4 border-t border-gray-800/60">
+            <div className="flex flex-col">
+              {stripeAccountId ? (
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span className="text-sm font-medium text-green-400">Connected</span>
+                  <span className="text-xs text-gray-500 font-mono ml-2">({stripeAccountId})</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                  <span className="text-sm font-medium text-gray-400">Not Connected</span>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={async () => {
+                setStripeSaving(true)
+                try {
+                  const connectStripe = httpsCallable(functions, 'connectStripeAccount')
+                  const { data } = await connectStripe({ 
+                    orgId: profile.org_id,
+                    returnUrl: window.location.href,
+                    refreshUrl: window.location.href
+                  })
+                  if (data?.url) {
+                    window.location.href = data.url
+                  }
+                } catch (e) {
+                  console.error('Failed to connect Stripe:', e)
+                } finally {
+                  setStripeSaving(false)
+                }
+              }} 
+              disabled={stripeSaving}
+              className={`px-5 py-2.5 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors ${
+                stripeAccountId ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700' : 'bg-[#635BFF] hover:bg-[#5851df]'
+              }`}>
+              {stripeSaving ? 'Connecting...' : (stripeAccountId ? 'Update Connection' : 'Connect with Stripe')}
             </button>
-            {stripeSuccess && <span className="text-green-400 text-sm">Saved.</span>}
           </div>
-        </form>
+        </div>
       </div>
 
       {/* Footer note */}

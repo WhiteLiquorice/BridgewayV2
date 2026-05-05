@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { auth } from '../lib/firebase'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 
 export default function Login() {
   const navigate  = useNavigate()
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [error,    setError]    = useState(null)
+  const [error,    setError]    = useState<string | null>(null)
   const [loading,  setLoading]  = useState(false)
 
   async function handleSubmit(e) {
@@ -14,14 +15,15 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setError(error.message)
+      await signInWithEmailAndPassword(auth, email, password)
+      navigate('/overview')
+    } catch (err: any) {
+      console.error('Login error:', err)
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Incorrect email or password.')
       } else {
-        navigate('/overview')
+        setError('Unable to sign in — check your connection and try again.')
       }
-    } catch {
-      setError('Unable to sign in — check your connection and try again.')
     } finally {
       setLoading(false)
     }

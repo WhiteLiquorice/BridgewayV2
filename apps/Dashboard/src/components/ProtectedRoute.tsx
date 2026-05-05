@@ -16,10 +16,16 @@ export default function ProtectedRoute() {
   if (!session) return <Navigate to="/login" replace />
 
   // Org loads async after session — only show paywall once org is confirmed inactive.
-  // While org is still null (loading), fall through and let the page render normally;
-  // the paywall will appear as soon as the org row resolves.
-  if (org?.status === 'inactive' || org?.subscriptionTier === 'booking-only') {
+  if (org?.status === 'inactive') {
     return <Paywall />
+  }
+
+  if (org?.subscriptionTier === 'booking-only') {
+    const allowedPaths = ['/overview', '/appointments', '/availability', '/settings']
+    const isAllowed = allowedPaths.some(p => window.location.pathname.startsWith(p))
+    if (!isAllowed) {
+      return <Paywall />
+    }
   }
 
   return <Outlet />

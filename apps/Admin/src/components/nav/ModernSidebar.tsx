@@ -28,20 +28,26 @@ export default function ModernSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {nav.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive ? 'bg-brand/10 text-brand' : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`
-            }
-          >
-            <Icon />
-            {label}
-          </NavLink>
-        ))}
+        {nav.map(({ to, label, icon: Icon }) => {
+          if (org?.subscriptionTier === 'booking-only' && 
+              ['Memberships', 'Activity Log', 'Forms', 'Commissions', 'Marketing', 'Inventory', 'Analytics'].includes(label)) {
+            return null
+          }
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive ? 'bg-brand/10 text-brand' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`
+              }
+            >
+              <Icon />
+              {label}
+            </NavLink>
+          )
+        })}
       </nav>
 
       {/* User footer */}

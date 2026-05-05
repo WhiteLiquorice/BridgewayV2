@@ -1,19 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { auth } from '../lib/firebase'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { useAuth } from '../context/AuthContext'
 
-// Fetch minimal public org branding before auth using VITE_ORG_ID.
-// Requires anon SELECT on orgs(id, name, primary_color, logo_url) in Supabase.
+// TODO: Replace with Firebase DataConnect query if branding is needed before auth.
 async function fetchOrgBranding() {
-  const orgId = import.meta.env.VITE_ORG_ID
-  if (!orgId) return null
-  const { data } = await supabase
-    .from('orgs')
-    .select('name, primary_color, logo_url')
-    .eq('id', orgId)
-    .maybeSingle()
-  return data
+  return null;
 }
 
 export default function Login() {
@@ -22,7 +15,7 @@ export default function Login() {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState(null)
+  const [error,    setError]    = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const wrongApp = searchParams.get('wrong-app') === '1'
 
@@ -54,15 +47,15 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        console.error('Login error:', error)
+      await signInWithEmailAndPassword(auth, email, password)
+      navigate('/', { replace: true })
+    } catch (err: any) {
+      console.error('Login error:', err)
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError('Incorrect email or password.')
       } else {
-        navigate('/', { replace: true })
+        setError('Unable to sign in — check your connection and try again.')
       }
-    } catch {
-      setError('Unable to sign in — check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -81,22 +74,12 @@ export default function Login() {
     }
     setLoading(true)
     try {
-      const orgId = import.meta.env.VITE_ORG_ID
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: signupName, role: 'patient', org_id: orgId || null },
-        },
-      })
-      if (error) {
-        console.error('Signup error:', error)
-        setError(error.message)
-      } else {
-        setSignupDone(true)
-      }
-    } catch {
-      setError('Unable to create account — check your connection and try again.')
+      // Note: Full signup flow (provisioning profile) should be handled via Firebase Functions or DataConnect
+      await createUserWithEmailAndPassword(auth, email, password)
+      setSignupDone(true)
+    } catch (err: any) {
+      console.error('Signup error:', err)
+      setError(err.message || 'Unable to create account — check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -107,17 +90,13 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/portal/profile`,
+      await sendPasswordResetEmail(auth, email, {
+        url: `${window.location.origin}/portal/profile`
       })
-      if (error) {
-        console.error('Reset error:', error)
-        setError(error.message)
-      } else {
-        setResetSent(true)
-      }
-    } catch {
-      setError('Unable to send reset link — check your connection and try again.')
+      setResetSent(true)
+    } catch (err: any) {
+      console.error('Reset error:', err)
+      setError(err.message || 'Unable to send reset link — check your connection and try again.')
     } finally {
       setLoading(false)
     }

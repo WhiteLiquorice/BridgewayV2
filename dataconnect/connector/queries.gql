@@ -25,12 +25,14 @@ query GetOrgSettings($orgId: UUID!) @auth(level: USER) {
     paymentRequired
     stripeCustomerId
     stripeSubscriptionId
+    stripeAccountId
     paymentPastDue
     externalCalendarId
     externalCalendarType
     externalCalendarSyncEnabled
     disabledWidgets
     bookingConfig
+    allowPhotoUpload
   }
 }
 
@@ -98,11 +100,13 @@ mutation UpdateOrgBranding(
 }
 
 # Update organization settings (widgets and booking config)
-mutation UpdateOrgSettings($orgId: UUID!, $disabledWidgets: Any, $bookingConfig: Any) @auth(level: USER) {
+mutation UpdateOrgSettings($orgId: UUID!, $disabledWidgets: Any, $bookingConfig: Any, $allowPhotoUpload: Boolean, $paymentRequired: Boolean) @auth(level: USER) {
   orgSetting_upsert(data: {
     orgId: $orgId,
     disabledWidgets: $disabledWidgets,
-    bookingConfig: $bookingConfig
+    bookingConfig: $bookingConfig,
+    allowPhotoUpload: $allowPhotoUpload,
+    paymentRequired: $paymentRequired
   })
 }
 

@@ -183,6 +183,7 @@ export default function Book() {
   const [orgError, setOrgError] = useState(null)
   const [paymentRequired, setPaymentRequired] = useState(false)
   const [externalSyncEnabled, setExternalSyncEnabled] = useState(false)
+  const [allowPhotoUpload, setAllowPhotoUpload] = useState(false)
 
   // Date step helpers
   const [existingBookings, setExistingBookings] = useState([])
@@ -263,7 +264,7 @@ export default function Book() {
 
       const { data: orgSettings } = await supabase
         .from('org_settings')
-        .select('payment_required, external_calendar_sync_enabled, stripe_account_id')
+        .select('payment_required, external_calendar_sync_enabled, stripe_account_id, booking_config, allow_photo_upload')
         .eq('org_id', loadedOrg.id)
         .maybeSingle()
         
@@ -272,6 +273,9 @@ export default function Book() {
       }
       if (orgSettings?.external_calendar_sync_enabled) {
         setExternalSyncEnabled(true)
+      }
+      if (orgSettings?.booking_config?.allowPhotoUpload || orgSettings?.allow_photo_upload) {
+        setAllowPhotoUpload(true)
       }
       loadedOrg.stripe_account_id = orgSettings?.stripe_account_id
 
@@ -424,8 +428,7 @@ export default function Book() {
 
       setSubmitting(false)
       send({ type: 'CONFIRM' })
-      supabase.functions.invoke('notify-new-booking', { body: { booking_id: data.id } })
-        .catch(() => { /* notification failure is non-fatal */ })
+      // Database triggers automatically handle notification dispatch.
     }
   }
 
@@ -777,24 +780,26 @@ export default function Book() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1.5">
-                  Reference Image <span className="text-gray-600 font-normal">(optional)</span>
-                </label>
-                <div className="w-full bg-[#0c1a2e] border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => {
-                      if (e.target.files && e.target.files[0]) {
-                        setReferenceImage(e.target.files[0])
-                      }
-                    }}
-                    className="w-full text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-amber-500/10 file:text-amber-500 hover:file:bg-amber-500/20 cursor-pointer"
-                  />
-                  {referenceImage && <p className="text-amber-400 text-xs mt-2 truncate">Selected: {referenceImage.name}</p>}
+              {allowPhotoUpload && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-1.5">
+                    Reference Image <span className="text-gray-600 font-normal">(optional)</span>
+                  </label>
+                  <div className="w-full bg-[#0c1a2e] border border-gray-700 rounded-lg px-3.5 py-2.5 text-sm transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          setReferenceImage(e.target.files[0])
+                        }
+                      }}
+                      className="w-full text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-amber-500/10 file:text-amber-500 hover:file:bg-amber-500/20 cursor-pointer"
+                    />
+                    {referenceImage && <p className="text-amber-400 text-xs mt-2 truncate">Selected: {referenceImage.name}</p>}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="flex justify-between mt-6">

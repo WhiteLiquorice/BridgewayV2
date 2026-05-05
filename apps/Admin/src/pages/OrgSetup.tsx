@@ -7,6 +7,7 @@ import {
   updateOrgSettings 
 } from '@bridgeway/database'
 import { ref, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage'
+import { getGoogleOAuthUrl, disconnectGoogleCalendar } from '../lib/firebase'
 
 const DASHBOARD_WIDGETS = [
   { id: 'todaySchedule',           label: "Today's Schedule" },
@@ -47,9 +48,15 @@ export default function OrgSetup() {
   const [disabledWidgets, setDisabledWidgets] = useState([])
   const [bookingShowProviders,    setBookingShowProviders]    = useState(true)
   const [bookingRequirePhone,     setBookingRequirePhone]     = useState(false)
+  const [bookingAllowPhotoUpload, setBookingAllowPhotoUpload] = useState(false)
   const [bookingWelcomeText,      setBookingWelcomeText]      = useState('')
   const [bookingConfirmationText, setBookingConfirmationText] = useState('')
   const [bookingCopied,           setBookingCopied]           = useState(false)
+
+  // Google Calendar
+  const [calendarConnected, setCalendarConnected] = useState(false)
+  const [connectingCalendar, setConnectingCalendar] = useState(false)
+  const [disconnectingCalendar, setDisconnectingCalendar] = useState(false)
 
   const [saveStatus,    setSaveStatus]    = useState('idle')
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -87,9 +94,17 @@ export default function OrgSetup() {
           const bc = settings.bookingConfig || {}
           if (bc.showProviders     !== undefined) setBookingShowProviders(bc.showProviders)
           if (bc.requirePhone      !== undefined) setBookingRequirePhone(bc.requirePhone)
+          if (settings.allowPhotoUpload !== null && settings.allowPhotoUpload !== undefined) {
+            setBookingAllowPhotoUpload(settings.allowPhotoUpload)
+          } else if (bc.allowPhotoUpload !== undefined) {
+            setBookingAllowPhotoUpload(bc.allowPhotoUpload)
+          }
           if (bc.welcomeText       !== undefined) setBookingWelcomeText(bc.welcomeText)
           if (bc.confirmationText  !== undefined) setBookingConfirmationText(bc.confirmationText)
         }
+        
+        // Also check if calendar is connected
+        setCalendarConnected(!!settings?.externalCalendarSyncEnabled)
       })
   }, [org?.id])
 
@@ -100,7 +115,7 @@ export default function OrgSetup() {
     autoSaveTimer.current = setTimeout(doSave, 1500)
     return () => clearTimeout(autoSaveTimer.current)
   }, [name, address, phone, website, primaryColor, secondaryColor, appTheme, timeoutAdmin, timeoutManager, timeoutStaff,
-      bookingShowProviders, bookingRequirePhone, bookingWelcomeText, bookingConfirmationText, initialized])
+      bookingShowProviders, bookingRequirePhone, bookingAllowPhotoUpload, bookingWelcomeText, bookingConfirmationText, initialized])
 
   async function doSave(overrides = {}) {
     if (!org?.id) return
@@ -122,9 +137,11 @@ export default function OrgSetup() {
       await updateOrgSettings(dataconnect, {
         orgId: org.id,
         disabledWidgets,
+        allowPhotoUpload: bookingAllowPhotoUpload,
         bookingConfig: {
           showProviders:    bookingShowProviders,
           requirePhone:     bookingRequirePhone,
+          allowPhotoUpload: bookingAllowPhotoUpload,
           welcomeText:      bookingWelcomeText,
           confirmationText: bookingConfirmationText,
         }
@@ -169,9 +186,11 @@ export default function OrgSetup() {
     updateOrgSettings(dataconnect, {
       orgId: org.id,
       disabledWidgets: next,
+      allowPhotoUpload: bookingAllowPhotoUpload,
       bookingConfig: {
         showProviders:    bookingShowProviders,
         requirePhone:     bookingRequirePhone,
+        allowPhotoUpload: bookingAllowPhotoUpload,
         welcomeText:      bookingWelcomeText,
         confirmationText: bookingConfirmationText,
       }
@@ -216,6 +235,31 @@ export default function OrgSetup() {
         <div className="w-8 h-8 border-4 border-brand border-t-transparent rounded-full animate-spin" />
       </div>
     )
+  }
+
+  async function handleConnectCalendar() {
+    if (!org?.id) return
+    setConnectingCalendar(true)
+    try {
+      const redirectUri = `${window.location.origin}/admin/oauth/google`
+      const result = await getGoogleOAuthUrl({ orgId: org.id, redirectUri })
+      window.location.href = result.data.url
+    } catch (err) {
+      console.error('Failed to get OAuth URL', err)
+      setConnectingCalendar(false)
+    }
+  }
+
+  async function handleDisconnectCalendar() {
+    if (!org?.id) return
+    setDisconnectingCalendar(true)
+    try {
+      await disconnectGoogleCalendar({ orgId: org.id })
+      setCalendarConnected(false)
+    } catch (err) {
+      console.error('Failed to disconnect calendar', err)
+    }
+    setDisconnectingCalendar(false)
   }
 
   return (
@@ -385,6 +429,10 @@ export default function OrgSetup() {
               <span className="text-sm">Require phone number</span>
               <input type="checkbox" checked={bookingRequirePhone} onChange={e => setBookingRequirePhone(e.target.checked)} />
             </div>
+            <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+              <span className="text-sm">Allow clients to upload reference photos</span>
+              <input type="checkbox" checked={bookingAllowPhotoUpload} onChange={e => setBookingAllowPhotoUpload(e.target.checked)} />
+            </div>
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">Welcome Message</label>
               <input type="text" value={bookingWelcomeText} onChange={e => setBookingWelcomeText(e.target.value)}
@@ -396,6 +444,60 @@ export default function OrgSetup() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm" />
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Calendar Connection */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden mt-6">
+        <div className="p-6 border-b border-gray-800">
+          <h2 className="text-white font-semibold text-base mb-1">Google Calendar Sync</h2>
+          <p className="text-gray-400 text-sm">
+            Connect your Google Calendar to automatically block out times when you're busy and add new bookings to your schedule.
+          </p>
+        </div>
+        <div className="p-6">
+          {calendarConnected ? (
+            <div className="flex items-center justify-between bg-[#0c1a2e] border border-gray-700 p-4 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-500/10 p-2 rounded-full">
+                  <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Calendar Connected</p>
+                  <p className="text-xs text-gray-400">Events are syncing successfully</p>
+                </div>
+              </div>
+              <button
+                onClick={handleDisconnectCalendar}
+                disabled={disconnectingCalendar}
+                className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {disconnectingCalendar ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between bg-[#0c1a2e] border border-gray-700 p-4 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className="bg-gray-800 p-2 rounded-full">
+                  <svg className="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12.0004 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12.0004 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12.0004 0ZM12.0004 21.6C6.69842 21.6 2.4 17.3016 2.4 12C2.4 6.69842 6.69842 2.4 12.0004 2.4C17.3016 2.4 21.6 6.69842 21.6 12C21.6 17.3016 17.3016 21.6 12.0004 21.6Z" />
+                    <path d="M12.0004 6V12L16.2426 16.2426" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Not Connected</p>
+                  <p className="text-xs text-gray-400">Connect to sync your availability</p>
+                </div>
+              </div>
+              <button
+                onClick={handleConnectCalendar}
+                disabled={connectingCalendar}
+                className="px-4 py-2 bg-white text-[#080f1d] hover:bg-gray-200 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {connectingCalendar ? 'Connecting...' : 'Connect Google Calendar'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

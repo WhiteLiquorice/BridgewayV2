@@ -12,10 +12,13 @@ export default function PastDueBanner() {
     if (!orgSettings?.stripe_customer_id) return
     setLoading(true)
     try {
-      const { data, error } = await supabase.functions.invoke('create-portal-session', {
-        body: { stripe_customer_id: orgSettings.stripe_customer_id },
+      const response = await fetch(`${import.meta.env.VITE_FIREBASE_FUNCTIONS_URL || 'https://us-central1-bridgeway-apps.cloudfunctions.net'}/createPortalSession`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stripe_customer_id: orgSettings.stripe_customer_id })
       })
-      if (error) throw error
+      if (!response.ok) throw new Error('Failed to create portal session')
+      const data = await response.json()
       if (data?.url) window.location.href = data.url
     } catch (err) {
       console.error('Failed to open billing portal:', err)

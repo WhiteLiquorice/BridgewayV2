@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { useTerminology } from '../context/TerminologyContext'
 import { supabase } from '../lib/supabase'
+import { functions } from '../lib/firebase'
+import { httpsCallable } from 'firebase/functions'
 import { STATUS_LABELS, getStatusStyle, getNextStatus, NEXT_ACTION_LABELS, NEXT_ACTION_STYLES } from '../lib/appointmentStatus'
 import { useToast } from '../context/ToastContext'
 import Modal from '../components/Modal'
@@ -171,26 +173,20 @@ export default function ClientDetail() {
     ? (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase()
     : client.name.charAt(0).toUpperCase()
 
-  // Portal invite handler — calls the invite-to-portal Edge Function
+  // Portal invite handler — calls the invite-to-portal Firebase Function
   async function handleInvite() {
     if (!client.email) return
     if (!window.confirm(`Send a portal invite to ${client.email}?`)) return
     setInviting(true)
     setInviteMsg(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      const res = await supabase.functions.invoke('invite-to-portal', {
-        body: {
-          email: client.email,
-          clientName: client.name,
-          portalUrl: `${window.location.origin.replace(':5173', ':5176')}/portal/profile`,
-        },
-        headers: { Authorization: `Bearer ${session?.access_token}` },
+      const inviteToPortal = httpsCallable(functions, 'inviteToPortal')
+      const { data } = await inviteToPortal({
+        email: client.email,
+        clientName: client.name,
+        portalUrl: `${window.location.origin.replace(':5173', ':5176')}/portal/profile`,
       })
-      if (res.error) throw res.error
-      const body = res.data
-      if (body?.error) throw new Error(body.error)
-      setInviteMsg({ type: 'success', text: body?.note || `Invite sent to ${client.email}.` })
+      setInviteMsg({ type: 'success', text: data?.note || `Invite sent to ${client.email}.` })
     } catch (err) {
       setInviteMsg({ type: 'error', text: err.message || 'Failed to send invite.' })
     } finally {

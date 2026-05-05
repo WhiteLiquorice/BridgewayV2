@@ -71,6 +71,138 @@ exports.createPortalSession = onRequest({ cors: true }, async (req, res) => {
   } catch (err) { res.status(500).send({ error: err.message }) }
 })
 
+exports.connectStripeAccount = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'User must be logged in')
+
+  const { orgId, returnUrl, refreshUrl } = request.data
+  if (!orgId) throw new HttpsError('invalid-argument', 'orgId is required')
+
+  const location = 'us-central1'
+  const serviceId = 'bridgeway-db'
+  const projectId = process.env.GCLOUD_PROJECT || 'bridgeway-apps'
+  const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true'
+  const baseUrl = isEmulator 
+    ? `http://127.0.0.1:9399/v1alpha/projects/${projectId}/locations/${location}/services/${serviceId}:executeGraphql`
+    : `https://firebasedataconnect.googleapis.com/v1alpha/projects/${projectId}/locations/${location}/services/${serviceId}:executeGraphql`
+
+  let headers = { 'Content-Type': 'application/json' }
+  if (!isEmulator) {
+    const authClient = await admin.credential.applicationDefault().getAccessToken()
+    headers['Authorization'] = `Bearer ${authClient.access_token}`
+  }
+
+  const queryGet = `
+    query GetStripeAccountId($orgId: UUID!) {
+      orgSettings(where: { orgId: { eq: $orgId } }) {
+        stripeAccountId
+      }
+    }
+  `
+  let accountId = null
+  try {
+    const responseGet = await fetch(baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query: queryGet, variables: { orgId } })
+    })
+    const resultGet = await responseGet.json()
+    if (resultGet.data?.orgSettings?.[0]?.stripeAccountId) {
+      accountId = resultGet.data.orgSettings[0].stripeAccountId
+    }
+  } catch (e) {
+    console.error('Error fetching orgSetting:', e)
+  }
+
+  if (!accountId) {
+    const account = await stripe.accounts.create({ type: 'standard' })
+    accountId = account.id
+
+    const queryUpsert = `
+      mutation UpdateStripeAccountId($orgId: UUID!, $stripeAccountId: String!) {
+        orgSetting_upsert(data: { orgId: $orgId, stripeAccountId: $stripeAccountId })
+      }
+    `
+    try {
+      await fetch(baseUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query: queryUpsert, variables: { orgId, stripeAccountId: accountId } })
+      })
+    } catch (e) {
+      console.error('Error upserting orgSetting:', e)
+    }
+  }
+
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: refreshUrl || 'https://admin.bridgewayapps.com/settings',
+    return_url: returnUrl || 'https://admin.bridgewayapps.com/settings',
+    type: 'account_onboarding',
+  })
+
+  return { url: accountLink.url }
+})
+
+exports.createPaymentIntent = onCall({ cors: true }, async (request) => {
+  const { orgId, amount } = request.data
+  if (!orgId || !amount) throw new HttpsError('invalid-argument', 'orgId and amount are required')
+
+  const location = 'us-central1'
+  const serviceId = 'bridgeway-db'
+  const projectId = process.env.GCLOUD_PROJECT || 'bridgeway-apps'
+  const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true'
+  const baseUrl = isEmulator 
+    ? `http://127.0.0.1:9399/v1alpha/projects/${projectId}/locations/${location}/services/${serviceId}:executeGraphql`
+    : `https://firebasedataconnect.googleapis.com/v1alpha/projects/${projectId}/locations/${location}/services/${serviceId}:executeGraphql`
+
+  let headers = { 'Content-Type': 'application/json' }
+  if (!isEmulator) {
+    const authClient = await admin.credential.applicationDefault().getAccessToken()
+    headers['Authorization'] = `Bearer ${authClient.access_token}`
+  }
+
+  const queryGet = `
+    query GetStripeAccountId($orgId: UUID!) {
+      orgSettings(where: { orgId: { eq: $orgId } }) {
+        stripeAccountId
+      }
+    }
+  `
+  let accountId = null
+  try {
+    const responseGet = await fetch(baseUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ query: queryGet, variables: { orgId } })
+    })
+    const resultGet = await responseGet.json()
+    if (resultGet.data?.orgSettings?.[0]?.stripeAccountId) {
+      accountId = resultGet.data.orgSettings[0].stripeAccountId
+    }
+  } catch (e) {
+    console.error('Error fetching orgSetting:', e)
+  }
+
+  if (!accountId) {
+    throw new HttpsError('failed-precondition', 'Organization has not connected a Stripe account')
+  }
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: 'usd',
+      automatic_payment_methods: { enabled: true },
+    }, {
+      stripeAccount: accountId,
+    })
+
+    return { clientSecret: paymentIntent.client_secret }
+  } catch (e) {
+    console.error('Error creating payment intent:', e)
+    throw new HttpsError('internal', e.message)
+  }
+})
+
 exports.stripeWebhook = onRequest({ cors: true }, async (req, res) => {
   const sig = req.headers['stripe-signature']
   let event
@@ -704,6 +836,95 @@ exports.createBookingHoldSession = onCall(async (request) => {
     })
 
     return { url: session.url }
+  } catch (error) {
+    throw new HttpsError('internal', error.message)
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PORTAL INVITES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+exports.inviteToPortal = onCall(async (request) => {
+  const { email, clientName, portalUrl } = request.data
+  if (!email) throw new HttpsError('invalid-argument', 'email is required')
+
+  try {
+    const actionCodeSettings = {
+      url: portalUrl || 'https://bridgewayapps.com/portal',
+      handleCodeInApp: true,
+    }
+    const link = await admin.auth().generateSignInWithEmailLink(email, actionCodeSettings)
+    
+    const emailBody = [
+      `Hi ${clientName || 'there'},`,
+      ``,
+      `You've been invited to access your client portal.`,
+      `Click the link below to sign in instantly without a password:`,
+      ``,
+      link,
+      ``,
+      `If you didn't request this, you can safely ignore this email.`,
+    ].join('\n')
+
+    await sendEmail({
+      toEmail: email,
+      toName: clientName || email,
+      subject: 'Your Client Portal Invite',
+      text: emailBody
+    })
+
+    return { success: true, note: `Invite sent to ${email}.` }
+  } catch (error) {
+    console.error('Failed to send invite:', error)
+    throw new HttpsError('internal', error.message)
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET BILLING INFO
+// ═══════════════════════════════════════════════════════════════════════════════
+
+exports.getBillingInfo = onCall(async (request) => {
+  const { stripe_customer_id } = request.data
+  if (!stripe_customer_id) throw new HttpsError('invalid-argument', 'stripe_customer_id is required')
+
+  try {
+    const subscriptions = await stripe.subscriptions.list({
+      customer: stripe_customer_id,
+      limit: 1,
+      status: 'all',
+      expand: ['data.default_payment_method']
+    })
+
+    if (!subscriptions.data.length) {
+      throw new HttpsError('not-found', 'No active subscription found')
+    }
+
+    const sub = subscriptions.data[0]
+    
+    // Get plan name
+    let planName = 'Bridgeway Apps'
+    if (sub.items.data.length > 0) {
+      const price = sub.items.data[0].price
+      if (price.nickname) planName = price.nickname
+    }
+
+    let paymentMethod = null
+    const pm = sub.default_payment_method
+    if (pm && pm.card) {
+      paymentMethod = {
+        brand: pm.card.brand,
+        last4: pm.card.last4
+      }
+    }
+
+    return {
+      status: sub.status,
+      currentPeriodEnd: sub.current_period_end,
+      paymentMethod,
+      planName
+    }
   } catch (error) {
     throw new HttpsError('internal', error.message)
   }

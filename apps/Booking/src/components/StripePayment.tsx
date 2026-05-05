@@ -86,16 +86,19 @@ export default function StripePayment({ orgId, stripePublishableKey, amount, onS
     async function createIntent() {
       setLoading(true)
       try {
-        const { data, error: err } = await supabase.functions.invoke('create-payment-intent', {
-          body: { org_id: orgId, amount },
-        })
-        if (err) throw err
+        const { getFunctions, httpsCallable } = await import('firebase/functions')
+        const functions = getFunctions()
+        const createPaymentIntent = httpsCallable(functions, 'createPaymentIntent')
+        
+        const { data } = await createPaymentIntent({ orgId, amount })
+        
         if (data?.clientSecret) {
           setClientSecret(data.clientSecret)
         } else if (data?.error) {
           setError(data.error)
         }
       } catch (err) {
+        console.error('Payment setup failed:', err)
         setError('Payment setup failed. You can complete payment at your visit.')
       } finally {
         setLoading(false)

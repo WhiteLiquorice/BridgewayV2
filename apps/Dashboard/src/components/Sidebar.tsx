@@ -119,6 +119,10 @@ export default function Sidebar({ onOpenShortcuts }) {
     }
   }
 
+  const allowedNav = org?.subscriptionTier === 'booking-only'
+    ? nav.filter(item => ['/overview', '/appointments', '/availability', '/settings'].includes(item.to))
+    : nav
+
   return (
     <aside className="w-64 flex-shrink-0 flex flex-col border-r border-gray-800 min-h-screen sticky top-0" style={{ backgroundColor: 'var(--bw-sidebar)' }}>
       {/* Logo / business name */}
@@ -144,7 +148,7 @@ export default function Sidebar({ onOpenShortcuts }) {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
-        {nav.map(({ to, label, icon }) => (
+        {allowedNav.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
