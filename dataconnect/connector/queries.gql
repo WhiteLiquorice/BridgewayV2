@@ -143,3 +143,203 @@ mutation ProvisionOrgSetting($orgId: UUID!, $stripeCustomerId: String!, $stripeS
     stripeSubscriptionId: $stripeSubscriptionId
   })
 }
+
+# Dashboard Stats Query
+query GetAdminDashboardStats($orgId: UUID!, $thirtyDaysAgo: Timestamp!, $sevenDaysAgo: Timestamp!, $todayStart: Timestamp!, $todayEnd: Timestamp!) @auth(level: USER) {
+  # Users count (fetch IDs to count client-side)
+  profiles(where: { orgId: { eq: $orgId } }) { id }
+  
+  # Clients count
+  clients(where: { orgId: { eq: $orgId } }) { id }
+  
+  # Appointments count
+  appointments(where: { orgId: { eq: $orgId } }) { id }
+  
+  # Services count
+  services(where: { orgId: { eq: $orgId } }) { id }
+  
+  # Recent Activity
+  activityLogs(where: { orgId: { eq: $orgId } }, orderBy: [{ createdAt: DESC }], limit: 5) {
+    id
+    action
+    createdAt
+    userId
+  }
+  
+  # Recent Clients
+  recentClients: clients(where: { orgId: { eq: $orgId }, createdAt: { ge: $thirtyDaysAgo } }) { id }
+  
+  # Recent Appointments (30 days)
+  recentAppts: appointments(where: { orgId: { eq: $orgId }, createdAt: { ge: $thirtyDaysAgo } }) {
+    id
+    status
+    amount
+    createdAt
+    cancellationReason
+  }
+  
+  # Week Appointments
+  weekAppts: appointments(where: { orgId: { eq: $orgId }, scheduledAt: { ge: $sevenDaysAgo } }) {
+    id
+    amount
+    scheduledAt
+  }
+  
+  # Today Appointments
+  todayAppts: appointments(where: { orgId: { eq: $orgId }, scheduledAt: { ge: $todayStart, le: $todayEnd } }) {
+    id
+    amount
+    status
+  }
+}
+
+# Booking App Data Queries
+query GetBookingPageData($slug: String!) @auth(level: NO_ACCESS) {
+  orgs(where: { slug: { eq: $slug }, subscriptionTier: { eq: "base" } }) {
+    id
+    name
+    logoUrl
+    primaryColor
+    secondaryColor
+    layoutTheme
+    appTheme
+    stripePublishableKey
+    services_on_org(where: { isArchived: { eq: false } }, orderBy: [{ name: ASC }]) {
+      id
+      name
+      description
+      durationMinutes
+      price
+    }
+    orgSetting_on_org {
+      paymentRequired
+      externalCalendarSyncEnabled
+      stripeAccountId
+      bookingConfig
+      allowPhotoUpload
+    }
+  }
+}
+
+query GetAppointmentsForDay($orgId: UUID!, $startOfDay: Timestamp!, $endOfDay: Timestamp!) @auth(level: NO_ACCESS) {
+  appointments(
+    where: { 
+      orgId: { eq: $orgId }, 
+      status: { in: ["confirmed", "pending"] }, 
+      scheduledAt: { ge: $startOfDay, le: $endOfDay } 
+    }
+  ) {
+    scheduledAt
+    service {
+      durationMinutes
+    }
+  }
+}
+
+query GetBookingById($id: UUID!) @auth(level: NO_ACCESS) {
+  booking(id: $id) {
+    id
+    status
+    paymentStatus
+    service {
+      id
+      name
+      price
+    }
+  }
+}
+
+mutation CreateBooking(
+  $orgId: UUID!, 
+  $serviceId: UUID, 
+  $name: String!, 
+  $email: String, 
+  $phone: String, 
+  $preferredDate: Date, 
+  $preferredTime: String, 
+  $notes: String, 
+  $status: String!, 
+  $paymentStatus: String
+) @auth(level: NO_ACCESS) {
+  booking_insert(data: {
+    orgId: $orgId,
+    serviceId: $serviceId,
+    name: $name,
+    email: $email,
+    phone: $phone,
+    preferredDate: $preferredDate,
+    preferredTime: $preferredTime,
+    notes: $notes,
+    status: $status,
+    paymentStatus: $paymentStatus
+  })
+}
+
+# Used by Cloud Functions to update booking status, reminders, and calendar links
+mutation UpdateBooking(
+  $id: UUID!,
+  $status: String,
+  $paymentStatus: String,
+  $reminder24hSent: Boolean,
+  $reminder2hSent: Boolean,
+  $googleEventId: String,
+  $googleEventLink: String
+) @auth(level: NO_ACCESS) {
+  booking_update(id: $id, data: {
+    status: $status,
+    paymentStatus: $paymentStatus,
+    reminder24hSent: $reminder24hSent,
+    reminder2hSent: $reminder2hSent,
+    googleEventId: $googleEventId,
+    googleEventLink: $googleEventLink
+  })
+}
+
+# Used by Cloud Functions for reminders
+query GetUpcomingBookings(
+  $status: String!,
+  $windowLo: Date!,
+  $windowHi: Date!,
+  $check24h: Boolean,
+  $check2h: Boolean
+) @auth(level: NO_ACCESS) {
+  bookings(where: {
+    status: { eq: $status },
+    preferredDate: { ge: $windowLo, le: $windowHi }
+  }) {
+    id
+    orgId
+    name
+    email
+    phone
+    preferredDate
+    preferredTime
+    reminder24hSent
+    reminder2hSent
+    service {
+      name
+    }
+  }
+}
+
+# Google Calendar Auth mutations
+mutation UpdateOrgGoogleCalendar(
+  $orgId: UUID!,
+  $externalCalendarSyncEnabled: Boolean,
+  $googleRefreshToken: String,
+  $googleAccessToken: String,
+  $googleTokenExpiry: Float,
+  $externalCalendarId: String,
+  $externalCalendarType: String
+) @auth(level: NO_ACCESS) {
+  orgSetting_upsert(data: {
+    orgId: $orgId,
+    externalCalendarSyncEnabled: $externalCalendarSyncEnabled,
+    googleRefreshToken: $googleRefreshToken,
+    googleAccessToken: $googleAccessToken,
+    googleTokenExpiry: $googleTokenExpiry,
+    externalCalendarId: $externalCalendarId,
+    externalCalendarType: $externalCalendarType
+  })
+}
+

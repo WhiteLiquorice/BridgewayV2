@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../lib/supabase'
-
+import { createCalendarEvent } from '../lib/firebase'
+import { updateBooking } from '@bridgeway/database'
 export default function UpcomingBookings() {
   const { profile } = useAuth()
   const [bookings, setBookings] = useState([])
@@ -74,6 +75,22 @@ export default function UpcomingBookings() {
         .from('bookings')
         .update({ status: 'confirmed', appointment_id: appt?.id ?? null })
         .eq('id', booking.id)
+
+      // Create calendar event and persist to Booking record via Data Connect
+      try {
+        const calResponse = await createCalendarEvent({ bookingId: booking.id })
+        const calData = calResponse.data
+        if (calData?.eventId) {
+          await updateBooking({
+            id: booking.id,
+            status: 'confirmed',
+            googleEventId: calData.eventId,
+            googleEventLink: calData.htmlLink || null
+          })
+        }
+      } catch (err) {
+        console.error('Failed to create calendar event:', err)
+      }
 
       await fetchBookings()
     } catch {

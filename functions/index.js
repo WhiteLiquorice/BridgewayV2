@@ -368,23 +368,10 @@ exports.syncStripeToSql = onDocumentUpdated('customers/{uid}/subscriptions/{subI
 // NOTIFICATION HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Fetch notification_settings for an org from Supabase via REST */
-async function getNotificationSettings(orgId) {
+async function executeDataConnect(query, variables) {
   const location = 'us-central1'
   const serviceId = 'bridgeway-db'
   const projectId = process.env.GCLOUD_PROJECT || 'bridgeway-apps'
-  
-  const query = `
-    query GetNotificationSetting($orgId: UUID!) {
-      notificationSettings(where: { orgId: { eq: $orgId } }, limit: 1) {
-        smsEnabled
-        emailEnabled
-        reminder24h
-        reminder2h
-      }
-    }
-  `
-  
   const isEmulator = process.env.FUNCTIONS_EMULATOR === 'true'
   const baseUrl = isEmulator 
     ? `http://127.0.0.1:9399/v1alpha/projects/${projectId}/locations/${location}/services/${serviceId}:executeGraphql`
@@ -400,17 +387,37 @@ async function getNotificationSettings(orgId) {
     const response = await fetch(baseUrl, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ query, variables: { orgId } })
+      body: JSON.stringify({ query, variables })
     })
     const result = await response.json()
     if (result.errors) {
-      console.error('Data Connect errors fetching notification settings:', result.errors)
-      return null
+      console.error('Data Connect errors:', result.errors)
+      throw new Error('GraphQL Error')
     }
-    const settings = result.data?.notificationSettings
+    return result.data
+  } catch (err) {
+    console.error('Data Connect request failed:', err)
+    throw err
+  }
+}
+
+/** Fetch notification_settings for an org from Supabase via REST */
+async function getNotificationSettings(orgId) {
+  const query = `
+    query GetNotificationSetting($orgId: UUID!) {
+      notificationSettings(where: { orgId: { eq: $orgId } }, limit: 1) {
+        smsEnabled
+        emailEnabled
+        reminder24h
+        reminder2h
+      }
+    }
+  `
+  try {
+    const data = await executeDataConnect(query, { orgId })
+    const settings = data?.notificationSettings
     return Array.isArray(settings) && settings.length ? settings[0] : null
   } catch (err) {
-    console.error('Failed to fetch notification settings from Data Connect:', err)
     return null
   }
 }
@@ -512,27 +519,41 @@ exports.send24hReminders = onSchedule(
     const windowLo = new Date(now.getTime() + 23 * 60 * 60 * 1000)
     const windowHi = new Date(now.getTime() + 25 * 60 * 60 * 1000)
 
-    const snap = await db.collection('bookings')
-      .where('status', '==', 'confirmed')
-      .where('reminder24hSent', '==', false)
-      .where('scheduledAt', '>=', windowLo.toISOString())
-      .where('scheduledAt', '<=', windowHi.toISOString())
-      .get()
+    const dateLo = windowLo.toISOString().split('T')[0]
+    const dateHi = windowHi.toISOString().split('T')[0]
 
-    console.log(`24h reminder job: ${snap.size} bookings in window`)
+    const query = `
+      query GetUpcomingBookings($status: String!, $windowLo: Date!, $windowHi: Date!) {
+        bookings(where: {
+          status: { eq: $status },
+          preferredDate: { ge: $windowLo, le: $windowHi }
+        }) {
+          id orgId name email phone preferredDate preferredTime reminder24hSent reminder2hSent
+          service { name }
+        }
+      }
+    `
+    const data = await executeDataConnect(query, { status: 'confirmed', windowLo: dateLo, windowHi: dateHi })
+    const bookings = data?.bookings || []
 
-    for (const docSnap of snap.docs) {
-      const booking = docSnap.data()
-      const ns = await getNotificationSettings(booking.orgId || booking.org_id)
+    console.log(`24h reminder job: ${bookings.length} bookings to check`)
+
+    for (const booking of bookings) {
+      if (booking.reminder24hSent) continue
+      
+      const apptDateTime = new Date(`${booking.preferredDate}T${booking.preferredTime || '09:00'}:00Z`)
+      if (apptDateTime < windowLo || apptDateTime > windowHi) continue
+
+      const ns = await getNotificationSettings(booking.orgId)
       if (!ns || (!ns.emailEnabled && !ns.smsEnabled) || !ns.reminder24h) {
-        // Mark as sent so we don't re-check every hour
-        await docSnap.ref.update({ reminder24hSent: true })
+        // Mark as sent
+        await executeDataConnect(`mutation UpdateBooking($id: UUID!, $reminder24hSent: Boolean!) { booking_update(id: $id, data: { reminder24hSent: $reminder24hSent }) }`, { id: booking.id, reminder24hSent: true })
         continue
       }
 
-      const apptTime   = formatApptTime(booking.scheduledAt)
-      const clientName = booking.clientName || 'there'
-      const service    = booking.serviceName || 'your appointment'
+      const apptTime   = formatApptTime(apptDateTime.toISOString())
+      const clientName = booking.name || 'there'
+      const service    = booking.service?.name || 'your appointment'
 
       const emailBody = [
         `Hi ${clientName},`,
@@ -546,14 +567,14 @@ exports.send24hReminders = onSchedule(
       const smsBody = `Reminder: Your ${service} appointment is tomorrow at ${apptTime}. Reply STOP to opt out.`
 
       const tasks = []
-      if (ns.emailEnabled && (booking.clientEmail || booking.email)) {
-        tasks.push(sendEmail({ toEmail: booking.clientEmail || booking.email, toName: clientName, subject: `Appointment reminder — ${service} tomorrow`, text: emailBody }).catch(e => console.error(e.message)))
+      if (ns.emailEnabled && booking.email) {
+        tasks.push(sendEmail({ toEmail: booking.email, toName: clientName, subject: `Appointment reminder — ${service} tomorrow`, text: emailBody }).catch(e => console.error(e.message)))
       }
-      if (ns.smsEnabled && (booking.clientPhone || booking.phone)) {
-        tasks.push(sendSms({ toPhone: booking.clientPhone || booking.phone, body: smsBody }).catch(e => console.error(e.message)))
+      if (ns.smsEnabled && booking.phone) {
+        tasks.push(sendSms({ toPhone: booking.phone, body: smsBody }).catch(e => console.error(e.message)))
       }
       await Promise.all(tasks)
-      await docSnap.ref.update({ reminder24hSent: true })
+      await executeDataConnect(`mutation UpdateBooking($id: UUID!, $reminder24hSent: Boolean!) { booking_update(id: $id, data: { reminder24hSent: $reminder24hSent }) }`, { id: booking.id, reminder24hSent: true })
     }
   }
 )
@@ -569,33 +590,47 @@ exports.send2hReminders = onSchedule(
     const windowLo = new Date(now.getTime() + 1.5 * 60 * 60 * 1000)
     const windowHi = new Date(now.getTime() + 2.5 * 60 * 60 * 1000)
 
-    const snap = await db.collection('bookings')
-      .where('status', '==', 'confirmed')
-      .where('reminder2hSent', '==', false)
-      .where('scheduledAt', '>=', windowLo.toISOString())
-      .where('scheduledAt', '<=', windowHi.toISOString())
-      .get()
+    const dateLo = windowLo.toISOString().split('T')[0]
+    const dateHi = windowHi.toISOString().split('T')[0]
 
-    console.log(`2h reminder job: ${snap.size} bookings in window`)
+    const query = `
+      query GetUpcomingBookings($status: String!, $windowLo: Date!, $windowHi: Date!) {
+        bookings(where: {
+          status: { eq: $status },
+          preferredDate: { ge: $windowLo, le: $windowHi }
+        }) {
+          id orgId name email phone preferredDate preferredTime reminder24hSent reminder2hSent
+          service { name }
+        }
+      }
+    `
+    const data = await executeDataConnect(query, { status: 'confirmed', windowLo: dateLo, windowHi: dateHi })
+    const bookings = data?.bookings || []
 
-    for (const docSnap of snap.docs) {
-      const booking = docSnap.data()
-      const ns = await getNotificationSettings(booking.orgId || booking.org_id)
+    console.log(`2h reminder job: ${bookings.length} bookings to check`)
+
+    for (const booking of bookings) {
+      if (booking.reminder2hSent) continue
+      
+      const apptDateTime = new Date(`${booking.preferredDate}T${booking.preferredTime || '09:00'}:00Z`)
+      if (apptDateTime < windowLo || apptDateTime > windowHi) continue
+
+      const ns = await getNotificationSettings(booking.orgId)
       if (!ns || !ns.smsEnabled || !ns.reminder2h) {
-        await docSnap.ref.update({ reminder2hSent: true })
+        await executeDataConnect(`mutation UpdateBooking($id: UUID!, $reminder2hSent: Boolean!) { booking_update(id: $id, data: { reminder2hSent: $reminder2hSent }) }`, { id: booking.id, reminder2hSent: true })
         continue
       }
 
-      const clientName = booking.clientName || 'there'
-      const service    = booking.serviceName || 'your appointment'
-      const apptTime   = formatApptTime(booking.scheduledAt)
+      const clientName = booking.name || 'there'
+      const service    = booking.service?.name || 'your appointment'
+      const apptTime   = formatApptTime(apptDateTime.toISOString())
       const smsBody    = `Heads up ${clientName} — your ${service} appointment is in about 2 hours (${apptTime}). See you soon! Reply STOP to opt out.`
 
-      if (booking.clientPhone) {
-        await sendSms({ toPhone: booking.clientPhone, body: smsBody })
+      if (booking.phone) {
+        await sendSms({ toPhone: booking.phone, body: smsBody })
           .catch(err => console.error('2h SMS failed:', err.message))
       }
-      await docSnap.ref.update({ reminder2hSent: true })
+      await executeDataConnect(`mutation UpdateBooking($id: UUID!, $reminder2hSent: Boolean!) { booking_update(id: $id, data: { reminder2hSent: $reminder2hSent }) }`, { id: booking.id, reminder2hSent: true })
     }
   }
 )
@@ -642,15 +677,12 @@ exports.handleGoogleOAuthCallback = onCall(async (request) => {
 
   if (!tokens.refresh_token) throw new HttpsError('failed-precondition', 'No refresh token. User must revoke and reconnect.')
 
-  await db.collection('bookingOrgs').doc(orgId).set({
-    googleCalendarConnected: true,
-    googleRefreshToken: tokens.refresh_token,
-    googleAccessToken: tokens.access_token,
-    googleTokenExpiry: tokens.expiry_date,
-    googleCalendarId: 'primary',
-  }, { merge: true })
-
-  return { success: true }
+  return { 
+    success: true,
+    refreshToken: tokens.refresh_token,
+    accessToken: tokens.access_token,
+    expiryDate: tokens.expiry_date
+  }
 })
 
 /**

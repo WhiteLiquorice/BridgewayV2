@@ -604,7 +604,7 @@ function GetStartedPage() {
           <p className="text-sm text-gray-400 mb-6">Perfect for businesses that just need the best booking engine on the market.</p>
           
           <div className="flex items-baseline gap-1 mb-8">
-            <span className="text-4xl font-bold text-white">$105</span>
+            <span className="text-4xl font-bold text-white">$40</span>
             <span className="text-sm text-gray-500">/ month</span>
           </div>
 
@@ -638,7 +638,7 @@ function GetStartedPage() {
           <p className="text-sm text-gray-400 mb-6">The complete practice management suite. Run your entire business in one place.</p>
           
           <div className="flex items-baseline gap-1 mb-8">
-            <span className="text-4xl font-bold text-white">$375</span>
+            <span className="text-4xl font-bold text-white">$300</span>
             <span className="text-sm text-gray-500">/ month</span>
           </div>
 

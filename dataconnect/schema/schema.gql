@@ -99,6 +99,10 @@ type Booking @table {
   notes: String
   status: String! @default(value: "pending")
   paymentStatus: String
+  reminder24hSent: Boolean @default(value: false)
+  reminder2hSent: Boolean @default(value: false)
+  googleEventId: String
+  googleEventLink: String
   createdAt: Timestamp! @default(expr: "request.time")
 }
 
@@ -194,6 +198,9 @@ type OrgSetting @table(key: ["org"]) {
   externalCalendarId: String
   externalCalendarType: String # e.g. 'google', 'outlook'
   externalCalendarSyncEnabled: Boolean @default(value: false)
+  googleRefreshToken: String
+  googleAccessToken: String
+  googleTokenExpiry: Float
   disabledWidgets: Any @default(value: [])
   bookingConfig: Any @default(value: {})
   allowPhotoUpload: Boolean @default(value: false)

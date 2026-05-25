@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFunctions } from 'firebase/functions';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getDataConnect, connectDataConnectEmulator } from 'firebase/data-connect';
 import { connectorConfig } from '@bridgeway/database';
 
@@ -18,6 +18,8 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
 export const dataconnect = getDataConnect(app, connectorConfig);
+
+export const createCalendarEvent = httpsCallable<{ bookingId: string }, { success: boolean, eventId?: string, eventLink?: string, error?: string }>(functions, 'createCalendarEvent');
 
 // If running in development, connect to the emulator
 // if (import.meta.env.DEV) {

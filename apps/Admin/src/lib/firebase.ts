@@ -37,3 +37,9 @@ export const disconnectGoogleCalendar = httpsCallable<
   { orgId: string },
   { success: boolean }
 >(functions, 'disconnectGoogleCalendar')
+
+/** Exchanges Google OAuth code for tokens */
+export const handleGoogleOAuthCallback = httpsCallable<
+  { orgId: string; code: string; redirectUri: string },
+  { success: boolean; refreshToken: string; accessToken: string; expiryDate: number }
+>(functions, 'handleGoogleOAuthCallback')

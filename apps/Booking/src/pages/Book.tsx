@@ -8,7 +8,7 @@ import { httpsCallable } from 'firebase/functions'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import StripePayment from '../components/StripePayment'
 import { generateSlots } from '@bridgeway/scheduling'
-
+import { getBookingPageData, getAppointmentsForDay, createBooking, getBookingById } from '@bridgeway/database'
 const STEPS_NO_PAY = ['Service', 'Date', 'Time', 'Your Info', 'Confirm']
 const STEPS_PAY = ['Service', 'Date', 'Time', 'Your Info', 'Payment', 'Confirm']
 
@@ -226,58 +226,41 @@ export default function Book() {
 
       // If returning from Stripe success, fetch the booking data
       if (searchParams.get('payment_success') === 'true' && searchParams.get('bookingId')) {
-        const { data: bookingData } = await supabase
-          .from('bookings')
-          .select('*, services(*)')
-          .eq('id', searchParams.get('bookingId'))
-          .single()
+        const { data: bookingData } = await getBookingById({ id: searchParams.get('bookingId') })
         
-        if (bookingData) {
-          setSuccessBooking(bookingData)
+        if (bookingData?.booking) {
+          setSuccessBooking({
+            ...bookingData.booking,
+            services: bookingData.booking.service
+          })
         }
       }
 
-      const orgRes = await supabase
-        .from('orgs')
-        .select('*')
-        .eq('slug', orgSlug)
-        .eq('subscription_tier', 'base')
-        .maybeSingle()
+      const { data: orgData } = await getBookingPageData({ slug: orgSlug })
+      const loadedOrg = orgData?.orgs?.[0]
 
-      if (orgRes.error || !orgRes.data) {
+      if (!loadedOrg) {
         setOrgError('Organization not found.')
         setLoadingInit(false)
         return
       }
 
-      const loadedOrg = orgRes.data
-
-      const { data: orgServices } = await supabase
-        .from('services')
-        .select('*')
-        .eq('org_id', loadedOrg.id)
-        .eq('is_archived', false)
-        .order('name')
-
+      const orgServices = loadedOrg.services_on_org
       setOrg(loadedOrg)
       setServices(orgServices || [])
 
-      const { data: orgSettings } = await supabase
-        .from('org_settings')
-        .select('payment_required, external_calendar_sync_enabled, stripe_account_id, booking_config, allow_photo_upload')
-        .eq('org_id', loadedOrg.id)
-        .maybeSingle()
+      const orgSettings = loadedOrg.orgSetting_on_org
         
-      if (orgSettings?.payment_required) {
+      if (orgSettings?.paymentRequired) {
         setPaymentRequired(true)
       }
-      if (orgSettings?.external_calendar_sync_enabled) {
+      if (orgSettings?.externalCalendarSyncEnabled) {
         setExternalSyncEnabled(true)
       }
-      if (orgSettings?.booking_config?.allowPhotoUpload || orgSettings?.allow_photo_upload) {
+      if (orgSettings?.bookingConfig?.allowPhotoUpload || orgSettings?.allowPhotoUpload) {
         setAllowPhotoUpload(true)
       }
-      loadedOrg.stripe_account_id = orgSettings?.stripe_account_id
+      loadedOrg.stripe_account_id = orgSettings?.stripeAccountId
 
       setLoadingInit(false)
     }
@@ -294,15 +277,18 @@ export default function Book() {
     const startOfDay = new Date(year, month - 1, day, 0, 0, 0).toISOString()
     const endOfDay = new Date(year, month - 1, day, 23, 59, 59).toISOString()
 
-    const { data } = await supabase
-      .from('appointments')
-      .select('scheduled_at, services(duration_minutes)')
-      .eq('org_id', org.id)
-      .in('status', ['confirmed', 'pending'])
-      .gte('scheduled_at', startOfDay)
-      .lte('scheduled_at', endOfDay)
+    const { data } = await getAppointmentsForDay({
+      orgId: org.id,
+      startOfDay,
+      endOfDay
+    })
 
-    setExistingBookings(data || [])
+    const formattedBookings = data?.appointments?.map(a => ({
+      scheduled_at: a.scheduledAt,
+      services: { duration_minutes: a.service?.durationMinutes || 60 }
+    })) || []
+
+    setExistingBookings(formattedBookings)
     setLoadingDate(false)
   }
 
@@ -384,26 +370,25 @@ export default function Book() {
       }
     }
 
-    const bookingPayload = {
-      org_id: org.id,
-      service_id: service.id,
+    const { data, error } = await createBooking({
+      orgId: org.id,
+      serviceId: service.id,
       name: details.name,
       email: details.email,
       phone: details.phone,
-      preferred_date: date,
-      preferred_time: time.toTimeString().slice(0, 5),
+      preferredDate: date,
+      preferredTime: time.toTimeString().slice(0, 5),
       notes: finalNotes,
       status: 'pending',
-    }
-    if (paymentCompleted) {
-      bookingPayload.payment_status = 'paid'
-    }
-    const { data, error } = await supabase.from('bookings').insert(bookingPayload).select().single()
+      paymentStatus: paymentCompleted ? 'paid' : null
+    })
 
     if (error) {
       setSubmitting(false)
-      send({ type: 'ERROR', message: error.message })
+      send({ type: 'ERROR', message: error.message || 'Failed to submit booking' })
     } else {
+      const newBookingId = data.booking_insert
+
       // If Stripe Connect payment is required, redirect to checkout
       if (needsPayment && org?.stripe_account_id && !paymentCompleted) {
         try {
@@ -412,9 +397,9 @@ export default function Book() {
             stripeAccountId: org.stripe_account_id,
             amount: Number(service.price) * 100, // Convert to cents
             currency: 'usd',
-            successUrl: `${window.location.origin}${window.location.pathname}?org=${org.slug}&payment_success=true&bookingId=${data.id}`,
+            successUrl: `${window.location.origin}${window.location.pathname}?org=${org.slug}&payment_success=true&bookingId=${newBookingId}`,
             cancelUrl: window.location.href,
-            bookingDetails: { bookingId: data.id }
+            bookingDetails: { bookingId: newBookingId }
           })
           window.location.href = result.data.url
           return

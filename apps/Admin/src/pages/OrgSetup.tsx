@@ -4,10 +4,11 @@ import { dataconnect } from '../lib/firebase'
 import { 
   getOrgSettings, 
   updateOrgBranding, 
-  updateOrgSettings 
+  updateOrgSettings,
+  updateOrgGoogleCalendar
 } from '@bridgeway/database'
 import { ref, uploadBytes, getDownloadURL, getStorage } from 'firebase/storage'
-import { getGoogleOAuthUrl, disconnectGoogleCalendar } from '../lib/firebase'
+import { getGoogleOAuthUrl, disconnectGoogleCalendar, handleGoogleOAuthCallback } from '../lib/firebase'
 
 const DASHBOARD_WIDGETS = [
   { id: 'todaySchedule',           label: "Today's Schedule" },
@@ -106,6 +107,36 @@ export default function OrgSetup() {
         // Also check if calendar is connected
         setCalendarConnected(!!settings?.externalCalendarSyncEnabled)
       })
+
+    // Handle OAuth callback
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    if (code) {
+      setConnectingCalendar(true)
+      const redirectUri = window.location.origin + window.location.pathname
+      // clear code from url
+      window.history.replaceState({}, document.title, window.location.pathname)
+
+      handleGoogleOAuthCallback({ orgId: org.id, code, redirectUri })
+        .then(async ({ data }) => {
+          if (data.success && data.refreshToken) {
+            await updateOrgGoogleCalendar(dataconnect, {
+              orgId: org.id,
+              externalCalendarSyncEnabled: true,
+              googleRefreshToken: data.refreshToken,
+              googleAccessToken: data.accessToken,
+              googleTokenExpiry: data.expiryDate,
+              externalCalendarId: 'primary',
+              externalCalendarType: 'google'
+            })
+            setCalendarConnected(true)
+          }
+        })
+        .catch(err => {
+          console.error('Failed to exchange Google OAuth code', err)
+        })
+        .finally(() => setConnectingCalendar(false))
+    }
   }, [org?.id])
 
   useEffect(() => {
@@ -241,7 +272,7 @@ export default function OrgSetup() {
     if (!org?.id) return
     setConnectingCalendar(true)
     try {
-      const redirectUri = `${window.location.origin}/admin/oauth/google`
+      const redirectUri = window.location.origin + window.location.pathname
       const result = await getGoogleOAuthUrl({ orgId: org.id, redirectUri })
       window.location.href = result.data.url
     } catch (err) {
@@ -254,6 +285,15 @@ export default function OrgSetup() {
     if (!org?.id) return
     setDisconnectingCalendar(true)
     try {
+      await updateOrgGoogleCalendar(dataconnect, {
+        orgId: org.id,
+        externalCalendarSyncEnabled: false,
+        googleRefreshToken: null,
+        googleAccessToken: null,
+        googleTokenExpiry: null,
+        externalCalendarId: null,
+        externalCalendarType: null
+      })
       await disconnectGoogleCalendar({ orgId: org.id })
       setCalendarConnected(false)
     } catch (err) {

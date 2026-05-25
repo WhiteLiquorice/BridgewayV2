@@ -128,3 +128,104 @@ export function provisionOrgSetting(dcOrVars, vars) {
   return executeMutation(provisionOrgSettingRef(dcInstance, inputVars));
 }
 
+export const getAdminDashboardStatsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetAdminDashboardStats', inputVars);
+}
+getAdminDashboardStatsRef.operationName = 'GetAdminDashboardStats';
+
+export function getAdminDashboardStats(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getAdminDashboardStatsRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+
+export const getBookingPageDataRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetBookingPageData', inputVars);
+}
+getBookingPageDataRef.operationName = 'GetBookingPageData';
+
+export function getBookingPageData(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getBookingPageDataRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+
+export const getAppointmentsForDayRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetAppointmentsForDay', inputVars);
+}
+getAppointmentsForDayRef.operationName = 'GetAppointmentsForDay';
+
+export function getAppointmentsForDay(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getAppointmentsForDayRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+
+export const getBookingByIdRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetBookingById', inputVars);
+}
+getBookingByIdRef.operationName = 'GetBookingById';
+
+export function getBookingById(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getBookingByIdRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+
+export const createBookingRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'CreateBooking', inputVars);
+}
+createBookingRef.operationName = 'CreateBooking';
+
+export function createBooking(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createBookingRef(dcInstance, inputVars));
+}
+
+export const updateBookingRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'UpdateBooking', inputVars);
+}
+updateBookingRef.operationName = 'UpdateBooking';
+
+export function updateBooking(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(updateBookingRef(dcInstance, inputVars));
+}
+
+export const getUpcomingBookingsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetUpcomingBookings', inputVars);
+}
+getUpcomingBookingsRef.operationName = 'GetUpcomingBookings';
+
+export function getUpcomingBookings(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getUpcomingBookingsRef(dcInstance, inputVars), inputOpts && inputOpts.fetchPolicy);
+}
+
+export const updateOrgGoogleCalendarRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'UpdateOrgGoogleCalendar', inputVars);
+}
+updateOrgGoogleCalendarRef.operationName = 'UpdateOrgGoogleCalendar';
+
+export function updateOrgGoogleCalendar(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(updateOrgGoogleCalendarRef(dcInstance, inputVars));
+}
+

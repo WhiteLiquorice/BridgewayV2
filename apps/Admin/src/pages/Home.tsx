@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { getAdminDashboardStats } from '@bridgeway/database'
 
 function PulseCard({ label, value, subtext, icon, alert = false }) {
   return (
@@ -54,34 +54,26 @@ export default function Home() {
       const todayStart = new Date(); todayStart.setHours(0,0,0,0);
       const todayEnd = new Date(); todayEnd.setHours(23,59,59,999);
 
-      const [users, clients, appointments, services, activity, recentClients, recentAppts, weekAppts, todayApptsRes] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id),
-        supabase.from('clients').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id),
-        supabase.from('appointments').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id),
-        supabase.from('services').select('id', { count: 'exact', head: true }).eq('org_id', profile.org_id),
-        supabase.from('activity_log').select('id, action, created_at, profiles(full_name)')
-          .eq('org_id', profile.org_id).order('created_at', { ascending: false }).limit(5),
-        supabase.from('clients').select('id', { count: 'exact', head: true })
-          .eq('org_id', profile.org_id).gte('created_at', thirtyDaysAgo),
-        supabase.from('appointments').select('id, status, price, created_at, cancellationReason')
-          .eq('org_id', profile.org_id).gte('created_at', thirtyDaysAgo),
-        supabase.from('appointments').select('id, price, start_time')
-          .eq('org_id', profile.org_id).gte('start_time', sevenDaysAgo),
-        supabase.from('appointments').select('id, price, status, is_paid')
-          .eq('org_id', profile.org_id).gte('start_time', todayStart.toISOString()).lte('start_time', todayEnd.toISOString())
-      ])
+      const res = await getAdminDashboardStats({
+        orgId: profile.org_id,
+        thirtyDaysAgo,
+        sevenDaysAgo,
+        todayStart: todayStart.toISOString(),
+        todayEnd: todayEnd.toISOString()
+      });
+      const data = res.data;
 
       setStats({
-        users: users.count ?? 0,
-        clients: clients.count ?? 0,
-        appointments: appointments.count ?? 0,
-        services: services.count ?? 0,
+        users: data.profiles.length,
+        clients: data.clients.length,
+        appointments: data.appointments.length,
+        services: data.services.length,
       })
-      setRecentActivity(activity.data || [])
+      setRecentActivity(data.activityLogs || [])
 
       // Analytics logic
-      const appts30 = recentAppts.data || []
-      const revenue30 = appts30.filter(a => a.status !== 'cancelled').reduce((sum, a) => sum + (Number(a.price) || 0), 0)
+      const appts30 = data.recentAppts || []
+      const revenue30 = appts30.filter(a => a.status !== 'cancelled').reduce((sum, a) => sum + (Number(a.amount) || 0), 0)
       const cancelled30 = appts30.filter(a => a.status === 'cancelled').length
       const cancellationRate30 = appts30.length > 0 ? Math.round((cancelled30 / appts30.length) * 100) : 0
 
@@ -102,20 +94,20 @@ export default function Home() {
         const key = d.toISOString().slice(0, 10)
         dayMap[key] = { date: key, count: 0, revenue: 0 }
       }
-      ;(weekAppts.data || []).forEach(a => {
-        if (!a.start_time) return
-        const key = a.start_time.slice(0, 10)
+      ;(data.weekAppts || []).forEach(a => {
+        if (!a.scheduledAt) return
+        const key = a.scheduledAt.slice(0, 10)
         if (dayMap[key]) {
           dayMap[key].count += 1
-          dayMap[key].revenue += Number(a.price) || 0
+          dayMap[key].revenue += Number(a.amount) || 0
         }
       })
 
       // Pulse Logic (Today)
-      const tAppts = todayApptsRes.data || [];
-      const todayRev = tAppts.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+      const tAppts = data.todayAppts || [];
+      const todayRev = tAppts.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
       // Simulate At-Risk as appointments today that are not paid/confirmed
-      const atRisk = tAppts.filter(a => !a.is_paid && a.status !== 'completed').reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+      const atRisk = tAppts.filter(a => a.status !== 'completed').reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
       // Mock Utilization (assume 8 appointments is 100% for simple demo)
       const util = Math.min(Math.round((tAppts.length / 10) * 100), 100);
 
@@ -128,12 +120,13 @@ export default function Home() {
 
       setAnalytics({
         revenue30,
-        newClients30: recentClients.count ?? 0,
+        newClients30: data.recentClients.length,
         cancellationRate30,
         dailyBreakdown: Object.values(dayMap),
         cancellationInsights,
       })
-    } catch {
+    } catch (err) {
+      console.error(err)
       // Keep defaults
     } finally {
       setLoading(false)
@@ -230,13 +223,13 @@ export default function Home() {
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full bg-brand" />
                           <p className="text-sm text-gray-300">
-                            <span className="font-medium text-white">{a.profiles?.full_name || 'System'}</span>
+                            <span className="font-medium text-white">{a.userId || 'System'}</span>
                             {' '}
                             <span className="text-gray-400">{a.action.replace(/\./g, ' ')}</span>
                           </p>
                         </div>
                         <span className="text-xs text-gray-500 whitespace-nowrap">
-                          {new Date(a.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                          {new Date(a.createdAt || a.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                         </span>
                       </div>
                     ))}

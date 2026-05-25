@@ -11,6 +11,11 @@ This README will guide you through the process of using the generated JavaScript
   - [*GetUserProfile*](#getuserprofile)
   - [*GetOrgSettings*](#getorgsettings)
   - [*GetOrgProfiles*](#getorgprofiles)
+  - [*GetAdminDashboardStats*](#getadmindashboardstats)
+  - [*GetBookingPageData*](#getbookingpagedata)
+  - [*GetAppointmentsForDay*](#getappointmentsforday)
+  - [*GetBookingById*](#getbookingbyid)
+  - [*GetUpcomingBookings*](#getupcomingbookings)
 - [**Mutations**](#mutations)
   - [*UpdateProfileStatus*](#updateprofilestatus)
   - [*CreateOrgProfile*](#createorgprofile)
@@ -19,6 +24,9 @@ This README will guide you through the process of using the generated JavaScript
   - [*CreateOrg*](#createorg)
   - [*ProvisionProfile*](#provisionprofile)
   - [*ProvisionOrgSetting*](#provisionorgsetting)
+  - [*CreateBooking*](#createbooking)
+  - [*UpdateBooking*](#updatebooking)
+  - [*UpdateOrgGoogleCalendar*](#updateorggooglecalendar)
 
 # Accessing the connector
 A connector is a collection of Queries and Mutations. One SDK is generated for each connector - this SDK is generated for the connector `default`. You can find more information about connectors in the [Data Connect documentation](https://firebase.google.com/docs/data-connect#how-does).
@@ -219,12 +227,14 @@ export interface GetOrgSettingsData {
     paymentRequired?: boolean | null;
     stripeCustomerId?: string | null;
     stripeSubscriptionId?: string | null;
+    stripeAccountId?: string | null;
     paymentPastDue?: boolean | null;
     externalCalendarId?: string | null;
     externalCalendarType?: string | null;
     externalCalendarSyncEnabled?: boolean | null;
     disabledWidgets?: unknown | null;
     bookingConfig?: unknown | null;
+    allowPhotoUpload?: boolean | null;
   })[];
 }
 ```
@@ -406,6 +416,700 @@ console.log(data.profiles);
 executeQuery(ref).then((response) => {
   const data = response.data;
   console.log(data.profiles);
+});
+```
+
+## GetAdminDashboardStats
+You can execute the `GetAdminDashboardStats` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getAdminDashboardStats(vars: GetAdminDashboardStatsVariables, options?: ExecuteQueryOptions): QueryPromise<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+
+interface GetAdminDashboardStatsRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetAdminDashboardStatsVariables): QueryRef<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+}
+export const getAdminDashboardStatsRef: GetAdminDashboardStatsRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getAdminDashboardStats(dc: DataConnect, vars: GetAdminDashboardStatsVariables, options?: ExecuteQueryOptions): QueryPromise<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+
+interface GetAdminDashboardStatsRef {
+  ...
+  (dc: DataConnect, vars: GetAdminDashboardStatsVariables): QueryRef<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+}
+export const getAdminDashboardStatsRef: GetAdminDashboardStatsRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getAdminDashboardStatsRef:
+```typescript
+const name = getAdminDashboardStatsRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetAdminDashboardStats` query requires an argument of type `GetAdminDashboardStatsVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetAdminDashboardStatsVariables {
+  orgId: UUIDString;
+  thirtyDaysAgo: TimestampString;
+  sevenDaysAgo: TimestampString;
+  todayStart: TimestampString;
+  todayEnd: TimestampString;
+}
+```
+### Return Type
+Recall that executing the `GetAdminDashboardStats` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetAdminDashboardStatsData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetAdminDashboardStatsData {
+  profiles: ({
+    id: UUIDString;
+  } & Profile_Key)[];
+    clients: ({
+      id: UUIDString;
+    } & Client_Key)[];
+      appointments: ({
+        id: UUIDString;
+      } & Appointment_Key)[];
+        services: ({
+          id: UUIDString;
+        } & Service_Key)[];
+          activityLogs: ({
+            id: UUIDString;
+            action: string;
+            createdAt: TimestampString;
+            userId?: string | null;
+          } & ActivityLog_Key)[];
+            recentClients: ({
+              id: UUIDString;
+            } & Client_Key)[];
+              recentAppts: ({
+                id: UUIDString;
+                status: string;
+                amount?: number | null;
+                createdAt: TimestampString;
+                cancellationReason?: string | null;
+              } & Appointment_Key)[];
+                weekAppts: ({
+                  id: UUIDString;
+                  amount?: number | null;
+                  scheduledAt: TimestampString;
+                } & Appointment_Key)[];
+                  todayAppts: ({
+                    id: UUIDString;
+                    amount?: number | null;
+                    status: string;
+                  } & Appointment_Key)[];
+}
+```
+### Using `GetAdminDashboardStats`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getAdminDashboardStats, GetAdminDashboardStatsVariables } from '@bridgeway/database';
+
+// The `GetAdminDashboardStats` query requires an argument of type `GetAdminDashboardStatsVariables`:
+const getAdminDashboardStatsVars: GetAdminDashboardStatsVariables = {
+  orgId: ..., 
+  thirtyDaysAgo: ..., 
+  sevenDaysAgo: ..., 
+  todayStart: ..., 
+  todayEnd: ..., 
+};
+
+// Call the `getAdminDashboardStats()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getAdminDashboardStats(getAdminDashboardStatsVars);
+// Variables can be defined inline as well.
+const { data } = await getAdminDashboardStats({ orgId: ..., thirtyDaysAgo: ..., sevenDaysAgo: ..., todayStart: ..., todayEnd: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getAdminDashboardStats(dataConnect, getAdminDashboardStatsVars);
+
+console.log(data.profiles);
+console.log(data.clients);
+console.log(data.appointments);
+console.log(data.services);
+console.log(data.activityLogs);
+console.log(data.recentClients);
+console.log(data.recentAppts);
+console.log(data.weekAppts);
+console.log(data.todayAppts);
+
+// Or, you can use the `Promise` API.
+getAdminDashboardStats(getAdminDashboardStatsVars).then((response) => {
+  const data = response.data;
+  console.log(data.profiles);
+  console.log(data.clients);
+  console.log(data.appointments);
+  console.log(data.services);
+  console.log(data.activityLogs);
+  console.log(data.recentClients);
+  console.log(data.recentAppts);
+  console.log(data.weekAppts);
+  console.log(data.todayAppts);
+});
+```
+
+### Using `GetAdminDashboardStats`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getAdminDashboardStatsRef, GetAdminDashboardStatsVariables } from '@bridgeway/database';
+
+// The `GetAdminDashboardStats` query requires an argument of type `GetAdminDashboardStatsVariables`:
+const getAdminDashboardStatsVars: GetAdminDashboardStatsVariables = {
+  orgId: ..., 
+  thirtyDaysAgo: ..., 
+  sevenDaysAgo: ..., 
+  todayStart: ..., 
+  todayEnd: ..., 
+};
+
+// Call the `getAdminDashboardStatsRef()` function to get a reference to the query.
+const ref = getAdminDashboardStatsRef(getAdminDashboardStatsVars);
+// Variables can be defined inline as well.
+const ref = getAdminDashboardStatsRef({ orgId: ..., thirtyDaysAgo: ..., sevenDaysAgo: ..., todayStart: ..., todayEnd: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getAdminDashboardStatsRef(dataConnect, getAdminDashboardStatsVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.profiles);
+console.log(data.clients);
+console.log(data.appointments);
+console.log(data.services);
+console.log(data.activityLogs);
+console.log(data.recentClients);
+console.log(data.recentAppts);
+console.log(data.weekAppts);
+console.log(data.todayAppts);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.profiles);
+  console.log(data.clients);
+  console.log(data.appointments);
+  console.log(data.services);
+  console.log(data.activityLogs);
+  console.log(data.recentClients);
+  console.log(data.recentAppts);
+  console.log(data.weekAppts);
+  console.log(data.todayAppts);
+});
+```
+
+## GetBookingPageData
+You can execute the `GetBookingPageData` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getBookingPageData(vars: GetBookingPageDataVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingPageDataData, GetBookingPageDataVariables>;
+
+interface GetBookingPageDataRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetBookingPageDataVariables): QueryRef<GetBookingPageDataData, GetBookingPageDataVariables>;
+}
+export const getBookingPageDataRef: GetBookingPageDataRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getBookingPageData(dc: DataConnect, vars: GetBookingPageDataVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingPageDataData, GetBookingPageDataVariables>;
+
+interface GetBookingPageDataRef {
+  ...
+  (dc: DataConnect, vars: GetBookingPageDataVariables): QueryRef<GetBookingPageDataData, GetBookingPageDataVariables>;
+}
+export const getBookingPageDataRef: GetBookingPageDataRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getBookingPageDataRef:
+```typescript
+const name = getBookingPageDataRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetBookingPageData` query requires an argument of type `GetBookingPageDataVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetBookingPageDataVariables {
+  slug: string;
+}
+```
+### Return Type
+Recall that executing the `GetBookingPageData` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetBookingPageDataData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetBookingPageDataData {
+  orgs: ({
+    id: UUIDString;
+    name: string;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    layoutTheme?: string | null;
+    appTheme?: string | null;
+    stripePublishableKey?: string | null;
+    services_on_org: ({
+      id: UUIDString;
+      name: string;
+      description?: string | null;
+      durationMinutes?: number | null;
+      price?: number | null;
+    } & Service_Key)[];
+      orgSetting_on_org?: {
+        paymentRequired?: boolean | null;
+        externalCalendarSyncEnabled?: boolean | null;
+        stripeAccountId?: string | null;
+        bookingConfig?: unknown | null;
+        allowPhotoUpload?: boolean | null;
+      };
+  } & Org_Key)[];
+}
+```
+### Using `GetBookingPageData`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getBookingPageData, GetBookingPageDataVariables } from '@bridgeway/database';
+
+// The `GetBookingPageData` query requires an argument of type `GetBookingPageDataVariables`:
+const getBookingPageDataVars: GetBookingPageDataVariables = {
+  slug: ..., 
+};
+
+// Call the `getBookingPageData()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getBookingPageData(getBookingPageDataVars);
+// Variables can be defined inline as well.
+const { data } = await getBookingPageData({ slug: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getBookingPageData(dataConnect, getBookingPageDataVars);
+
+console.log(data.orgs);
+
+// Or, you can use the `Promise` API.
+getBookingPageData(getBookingPageDataVars).then((response) => {
+  const data = response.data;
+  console.log(data.orgs);
+});
+```
+
+### Using `GetBookingPageData`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getBookingPageDataRef, GetBookingPageDataVariables } from '@bridgeway/database';
+
+// The `GetBookingPageData` query requires an argument of type `GetBookingPageDataVariables`:
+const getBookingPageDataVars: GetBookingPageDataVariables = {
+  slug: ..., 
+};
+
+// Call the `getBookingPageDataRef()` function to get a reference to the query.
+const ref = getBookingPageDataRef(getBookingPageDataVars);
+// Variables can be defined inline as well.
+const ref = getBookingPageDataRef({ slug: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getBookingPageDataRef(dataConnect, getBookingPageDataVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.orgs);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.orgs);
+});
+```
+
+## GetAppointmentsForDay
+You can execute the `GetAppointmentsForDay` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getAppointmentsForDay(vars: GetAppointmentsForDayVariables, options?: ExecuteQueryOptions): QueryPromise<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+
+interface GetAppointmentsForDayRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetAppointmentsForDayVariables): QueryRef<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+}
+export const getAppointmentsForDayRef: GetAppointmentsForDayRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getAppointmentsForDay(dc: DataConnect, vars: GetAppointmentsForDayVariables, options?: ExecuteQueryOptions): QueryPromise<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+
+interface GetAppointmentsForDayRef {
+  ...
+  (dc: DataConnect, vars: GetAppointmentsForDayVariables): QueryRef<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+}
+export const getAppointmentsForDayRef: GetAppointmentsForDayRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getAppointmentsForDayRef:
+```typescript
+const name = getAppointmentsForDayRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetAppointmentsForDay` query requires an argument of type `GetAppointmentsForDayVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetAppointmentsForDayVariables {
+  orgId: UUIDString;
+  startOfDay: TimestampString;
+  endOfDay: TimestampString;
+}
+```
+### Return Type
+Recall that executing the `GetAppointmentsForDay` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetAppointmentsForDayData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetAppointmentsForDayData {
+  appointments: ({
+    scheduledAt: TimestampString;
+    service?: {
+      durationMinutes?: number | null;
+    };
+  })[];
+}
+```
+### Using `GetAppointmentsForDay`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getAppointmentsForDay, GetAppointmentsForDayVariables } from '@bridgeway/database';
+
+// The `GetAppointmentsForDay` query requires an argument of type `GetAppointmentsForDayVariables`:
+const getAppointmentsForDayVars: GetAppointmentsForDayVariables = {
+  orgId: ..., 
+  startOfDay: ..., 
+  endOfDay: ..., 
+};
+
+// Call the `getAppointmentsForDay()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getAppointmentsForDay(getAppointmentsForDayVars);
+// Variables can be defined inline as well.
+const { data } = await getAppointmentsForDay({ orgId: ..., startOfDay: ..., endOfDay: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getAppointmentsForDay(dataConnect, getAppointmentsForDayVars);
+
+console.log(data.appointments);
+
+// Or, you can use the `Promise` API.
+getAppointmentsForDay(getAppointmentsForDayVars).then((response) => {
+  const data = response.data;
+  console.log(data.appointments);
+});
+```
+
+### Using `GetAppointmentsForDay`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getAppointmentsForDayRef, GetAppointmentsForDayVariables } from '@bridgeway/database';
+
+// The `GetAppointmentsForDay` query requires an argument of type `GetAppointmentsForDayVariables`:
+const getAppointmentsForDayVars: GetAppointmentsForDayVariables = {
+  orgId: ..., 
+  startOfDay: ..., 
+  endOfDay: ..., 
+};
+
+// Call the `getAppointmentsForDayRef()` function to get a reference to the query.
+const ref = getAppointmentsForDayRef(getAppointmentsForDayVars);
+// Variables can be defined inline as well.
+const ref = getAppointmentsForDayRef({ orgId: ..., startOfDay: ..., endOfDay: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getAppointmentsForDayRef(dataConnect, getAppointmentsForDayVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.appointments);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.appointments);
+});
+```
+
+## GetBookingById
+You can execute the `GetBookingById` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getBookingById(vars: GetBookingByIdVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingByIdData, GetBookingByIdVariables>;
+
+interface GetBookingByIdRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetBookingByIdVariables): QueryRef<GetBookingByIdData, GetBookingByIdVariables>;
+}
+export const getBookingByIdRef: GetBookingByIdRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getBookingById(dc: DataConnect, vars: GetBookingByIdVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingByIdData, GetBookingByIdVariables>;
+
+interface GetBookingByIdRef {
+  ...
+  (dc: DataConnect, vars: GetBookingByIdVariables): QueryRef<GetBookingByIdData, GetBookingByIdVariables>;
+}
+export const getBookingByIdRef: GetBookingByIdRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getBookingByIdRef:
+```typescript
+const name = getBookingByIdRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetBookingById` query requires an argument of type `GetBookingByIdVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetBookingByIdVariables {
+  id: UUIDString;
+}
+```
+### Return Type
+Recall that executing the `GetBookingById` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetBookingByIdData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetBookingByIdData {
+  booking?: {
+    id: UUIDString;
+    status: string;
+    paymentStatus?: string | null;
+    service?: {
+      id: UUIDString;
+      name: string;
+      price?: number | null;
+    } & Service_Key;
+  } & Booking_Key;
+}
+```
+### Using `GetBookingById`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getBookingById, GetBookingByIdVariables } from '@bridgeway/database';
+
+// The `GetBookingById` query requires an argument of type `GetBookingByIdVariables`:
+const getBookingByIdVars: GetBookingByIdVariables = {
+  id: ..., 
+};
+
+// Call the `getBookingById()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getBookingById(getBookingByIdVars);
+// Variables can be defined inline as well.
+const { data } = await getBookingById({ id: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getBookingById(dataConnect, getBookingByIdVars);
+
+console.log(data.booking);
+
+// Or, you can use the `Promise` API.
+getBookingById(getBookingByIdVars).then((response) => {
+  const data = response.data;
+  console.log(data.booking);
+});
+```
+
+### Using `GetBookingById`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getBookingByIdRef, GetBookingByIdVariables } from '@bridgeway/database';
+
+// The `GetBookingById` query requires an argument of type `GetBookingByIdVariables`:
+const getBookingByIdVars: GetBookingByIdVariables = {
+  id: ..., 
+};
+
+// Call the `getBookingByIdRef()` function to get a reference to the query.
+const ref = getBookingByIdRef(getBookingByIdVars);
+// Variables can be defined inline as well.
+const ref = getBookingByIdRef({ id: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getBookingByIdRef(dataConnect, getBookingByIdVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.booking);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.booking);
+});
+```
+
+## GetUpcomingBookings
+You can execute the `GetUpcomingBookings` query using the following action shortcut function, or by calling `executeQuery()` after calling the following `QueryRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+getUpcomingBookings(vars: GetUpcomingBookingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+
+interface GetUpcomingBookingsRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetUpcomingBookingsVariables): QueryRef<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+}
+export const getUpcomingBookingsRef: GetUpcomingBookingsRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `QueryRef` function.
+```typescript
+getUpcomingBookings(dc: DataConnect, vars: GetUpcomingBookingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+
+interface GetUpcomingBookingsRef {
+  ...
+  (dc: DataConnect, vars: GetUpcomingBookingsVariables): QueryRef<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+}
+export const getUpcomingBookingsRef: GetUpcomingBookingsRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the getUpcomingBookingsRef:
+```typescript
+const name = getUpcomingBookingsRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `GetUpcomingBookings` query requires an argument of type `GetUpcomingBookingsVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface GetUpcomingBookingsVariables {
+  status: string;
+  windowLo: DateString;
+  windowHi: DateString;
+  check24h?: boolean | null;
+  check2h?: boolean | null;
+}
+```
+### Return Type
+Recall that executing the `GetUpcomingBookings` query returns a `QueryPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `GetUpcomingBookingsData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface GetUpcomingBookingsData {
+  bookings: ({
+    id: UUIDString;
+    orgId: UUIDString;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    preferredDate?: DateString | null;
+    preferredTime?: string | null;
+    reminder24hSent?: boolean | null;
+    reminder2hSent?: boolean | null;
+    service?: {
+      name: string;
+    };
+  } & Booking_Key)[];
+}
+```
+### Using `GetUpcomingBookings`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, getUpcomingBookings, GetUpcomingBookingsVariables } from '@bridgeway/database';
+
+// The `GetUpcomingBookings` query requires an argument of type `GetUpcomingBookingsVariables`:
+const getUpcomingBookingsVars: GetUpcomingBookingsVariables = {
+  status: ..., 
+  windowLo: ..., 
+  windowHi: ..., 
+  check24h: ..., // optional
+  check2h: ..., // optional
+};
+
+// Call the `getUpcomingBookings()` function to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await getUpcomingBookings(getUpcomingBookingsVars);
+// Variables can be defined inline as well.
+const { data } = await getUpcomingBookings({ status: ..., windowLo: ..., windowHi: ..., check24h: ..., check2h: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await getUpcomingBookings(dataConnect, getUpcomingBookingsVars);
+
+console.log(data.bookings);
+
+// Or, you can use the `Promise` API.
+getUpcomingBookings(getUpcomingBookingsVars).then((response) => {
+  const data = response.data;
+  console.log(data.bookings);
+});
+```
+
+### Using `GetUpcomingBookings`'s `QueryRef` function
+
+```typescript
+import { getDataConnect, executeQuery } from 'firebase/data-connect';
+import { connectorConfig, getUpcomingBookingsRef, GetUpcomingBookingsVariables } from '@bridgeway/database';
+
+// The `GetUpcomingBookings` query requires an argument of type `GetUpcomingBookingsVariables`:
+const getUpcomingBookingsVars: GetUpcomingBookingsVariables = {
+  status: ..., 
+  windowLo: ..., 
+  windowHi: ..., 
+  check24h: ..., // optional
+  check2h: ..., // optional
+};
+
+// Call the `getUpcomingBookingsRef()` function to get a reference to the query.
+const ref = getUpcomingBookingsRef(getUpcomingBookingsVars);
+// Variables can be defined inline as well.
+const ref = getUpcomingBookingsRef({ status: ..., windowLo: ..., windowHi: ..., check24h: ..., check2h: ..., });
+
+// You can also pass in a `DataConnect` instance to the `QueryRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = getUpcomingBookingsRef(dataConnect, getUpcomingBookingsVars);
+
+// Call `executeQuery()` on the reference to execute the query.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeQuery(ref);
+
+console.log(data.bookings);
+
+// Or, you can use the `Promise` API.
+executeQuery(ref).then((response) => {
+  const data = response.data;
+  console.log(data.bookings);
 });
 ```
 
@@ -839,6 +1543,8 @@ export interface UpdateOrgSettingsVariables {
   orgId: UUIDString;
   disabledWidgets?: unknown | null;
   bookingConfig?: unknown | null;
+  allowPhotoUpload?: boolean | null;
+  paymentRequired?: boolean | null;
 }
 ```
 ### Return Type
@@ -861,13 +1567,15 @@ const updateOrgSettingsVars: UpdateOrgSettingsVariables = {
   orgId: ..., 
   disabledWidgets: ..., // optional
   bookingConfig: ..., // optional
+  allowPhotoUpload: ..., // optional
+  paymentRequired: ..., // optional
 };
 
 // Call the `updateOrgSettings()` function to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.
 const { data } = await updateOrgSettings(updateOrgSettingsVars);
 // Variables can be defined inline as well.
-const { data } = await updateOrgSettings({ orgId: ..., disabledWidgets: ..., bookingConfig: ..., });
+const { data } = await updateOrgSettings({ orgId: ..., disabledWidgets: ..., bookingConfig: ..., allowPhotoUpload: ..., paymentRequired: ..., });
 
 // You can also pass in a `DataConnect` instance to the action shortcut function.
 const dataConnect = getDataConnect(connectorConfig);
@@ -893,12 +1601,14 @@ const updateOrgSettingsVars: UpdateOrgSettingsVariables = {
   orgId: ..., 
   disabledWidgets: ..., // optional
   bookingConfig: ..., // optional
+  allowPhotoUpload: ..., // optional
+  paymentRequired: ..., // optional
 };
 
 // Call the `updateOrgSettingsRef()` function to get a reference to the mutation.
 const ref = updateOrgSettingsRef(updateOrgSettingsVars);
 // Variables can be defined inline as well.
-const ref = updateOrgSettingsRef({ orgId: ..., disabledWidgets: ..., bookingConfig: ..., });
+const ref = updateOrgSettingsRef({ orgId: ..., disabledWidgets: ..., bookingConfig: ..., allowPhotoUpload: ..., paymentRequired: ..., });
 
 // You can also pass in a `DataConnect` instance to the `MutationRef` function.
 const dataConnect = getDataConnect(connectorConfig);
@@ -1257,6 +1967,396 @@ const ref = provisionOrgSettingRef({ orgId: ..., stripeCustomerId: ..., stripeSu
 // You can also pass in a `DataConnect` instance to the `MutationRef` function.
 const dataConnect = getDataConnect(connectorConfig);
 const ref = provisionOrgSettingRef(dataConnect, provisionOrgSettingVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.orgSetting_upsert);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.orgSetting_upsert);
+});
+```
+
+## CreateBooking
+You can execute the `CreateBooking` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+createBooking(vars: CreateBookingVariables): MutationPromise<CreateBookingData, CreateBookingVariables>;
+
+interface CreateBookingRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateBookingVariables): MutationRef<CreateBookingData, CreateBookingVariables>;
+}
+export const createBookingRef: CreateBookingRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+createBooking(dc: DataConnect, vars: CreateBookingVariables): MutationPromise<CreateBookingData, CreateBookingVariables>;
+
+interface CreateBookingRef {
+  ...
+  (dc: DataConnect, vars: CreateBookingVariables): MutationRef<CreateBookingData, CreateBookingVariables>;
+}
+export const createBookingRef: CreateBookingRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the createBookingRef:
+```typescript
+const name = createBookingRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `CreateBooking` mutation requires an argument of type `CreateBookingVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface CreateBookingVariables {
+  orgId: UUIDString;
+  serviceId?: UUIDString | null;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  preferredDate?: DateString | null;
+  preferredTime?: string | null;
+  notes?: string | null;
+  status: string;
+  paymentStatus?: string | null;
+}
+```
+### Return Type
+Recall that executing the `CreateBooking` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `CreateBookingData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface CreateBookingData {
+  booking_insert: Booking_Key;
+}
+```
+### Using `CreateBooking`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, createBooking, CreateBookingVariables } from '@bridgeway/database';
+
+// The `CreateBooking` mutation requires an argument of type `CreateBookingVariables`:
+const createBookingVars: CreateBookingVariables = {
+  orgId: ..., 
+  serviceId: ..., // optional
+  name: ..., 
+  email: ..., // optional
+  phone: ..., // optional
+  preferredDate: ..., // optional
+  preferredTime: ..., // optional
+  notes: ..., // optional
+  status: ..., 
+  paymentStatus: ..., // optional
+};
+
+// Call the `createBooking()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await createBooking(createBookingVars);
+// Variables can be defined inline as well.
+const { data } = await createBooking({ orgId: ..., serviceId: ..., name: ..., email: ..., phone: ..., preferredDate: ..., preferredTime: ..., notes: ..., status: ..., paymentStatus: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await createBooking(dataConnect, createBookingVars);
+
+console.log(data.booking_insert);
+
+// Or, you can use the `Promise` API.
+createBooking(createBookingVars).then((response) => {
+  const data = response.data;
+  console.log(data.booking_insert);
+});
+```
+
+### Using `CreateBooking`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, createBookingRef, CreateBookingVariables } from '@bridgeway/database';
+
+// The `CreateBooking` mutation requires an argument of type `CreateBookingVariables`:
+const createBookingVars: CreateBookingVariables = {
+  orgId: ..., 
+  serviceId: ..., // optional
+  name: ..., 
+  email: ..., // optional
+  phone: ..., // optional
+  preferredDate: ..., // optional
+  preferredTime: ..., // optional
+  notes: ..., // optional
+  status: ..., 
+  paymentStatus: ..., // optional
+};
+
+// Call the `createBookingRef()` function to get a reference to the mutation.
+const ref = createBookingRef(createBookingVars);
+// Variables can be defined inline as well.
+const ref = createBookingRef({ orgId: ..., serviceId: ..., name: ..., email: ..., phone: ..., preferredDate: ..., preferredTime: ..., notes: ..., status: ..., paymentStatus: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = createBookingRef(dataConnect, createBookingVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.booking_insert);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.booking_insert);
+});
+```
+
+## UpdateBooking
+You can execute the `UpdateBooking` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+updateBooking(vars: UpdateBookingVariables): MutationPromise<UpdateBookingData, UpdateBookingVariables>;
+
+interface UpdateBookingRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateBookingVariables): MutationRef<UpdateBookingData, UpdateBookingVariables>;
+}
+export const updateBookingRef: UpdateBookingRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+updateBooking(dc: DataConnect, vars: UpdateBookingVariables): MutationPromise<UpdateBookingData, UpdateBookingVariables>;
+
+interface UpdateBookingRef {
+  ...
+  (dc: DataConnect, vars: UpdateBookingVariables): MutationRef<UpdateBookingData, UpdateBookingVariables>;
+}
+export const updateBookingRef: UpdateBookingRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the updateBookingRef:
+```typescript
+const name = updateBookingRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `UpdateBooking` mutation requires an argument of type `UpdateBookingVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface UpdateBookingVariables {
+  id: UUIDString;
+  status?: string | null;
+  paymentStatus?: string | null;
+  reminder24hSent?: boolean | null;
+  reminder2hSent?: boolean | null;
+  googleEventId?: string | null;
+  googleEventLink?: string | null;
+}
+```
+### Return Type
+Recall that executing the `UpdateBooking` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `UpdateBookingData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface UpdateBookingData {
+  booking_update?: Booking_Key | null;
+}
+```
+### Using `UpdateBooking`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, updateBooking, UpdateBookingVariables } from '@bridgeway/database';
+
+// The `UpdateBooking` mutation requires an argument of type `UpdateBookingVariables`:
+const updateBookingVars: UpdateBookingVariables = {
+  id: ..., 
+  status: ..., // optional
+  paymentStatus: ..., // optional
+  reminder24hSent: ..., // optional
+  reminder2hSent: ..., // optional
+  googleEventId: ..., // optional
+  googleEventLink: ..., // optional
+};
+
+// Call the `updateBooking()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await updateBooking(updateBookingVars);
+// Variables can be defined inline as well.
+const { data } = await updateBooking({ id: ..., status: ..., paymentStatus: ..., reminder24hSent: ..., reminder2hSent: ..., googleEventId: ..., googleEventLink: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await updateBooking(dataConnect, updateBookingVars);
+
+console.log(data.booking_update);
+
+// Or, you can use the `Promise` API.
+updateBooking(updateBookingVars).then((response) => {
+  const data = response.data;
+  console.log(data.booking_update);
+});
+```
+
+### Using `UpdateBooking`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, updateBookingRef, UpdateBookingVariables } from '@bridgeway/database';
+
+// The `UpdateBooking` mutation requires an argument of type `UpdateBookingVariables`:
+const updateBookingVars: UpdateBookingVariables = {
+  id: ..., 
+  status: ..., // optional
+  paymentStatus: ..., // optional
+  reminder24hSent: ..., // optional
+  reminder2hSent: ..., // optional
+  googleEventId: ..., // optional
+  googleEventLink: ..., // optional
+};
+
+// Call the `updateBookingRef()` function to get a reference to the mutation.
+const ref = updateBookingRef(updateBookingVars);
+// Variables can be defined inline as well.
+const ref = updateBookingRef({ id: ..., status: ..., paymentStatus: ..., reminder24hSent: ..., reminder2hSent: ..., googleEventId: ..., googleEventLink: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = updateBookingRef(dataConnect, updateBookingVars);
+
+// Call `executeMutation()` on the reference to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await executeMutation(ref);
+
+console.log(data.booking_update);
+
+// Or, you can use the `Promise` API.
+executeMutation(ref).then((response) => {
+  const data = response.data;
+  console.log(data.booking_update);
+});
+```
+
+## UpdateOrgGoogleCalendar
+You can execute the `UpdateOrgGoogleCalendar` mutation using the following action shortcut function, or by calling `executeMutation()` after calling the following `MutationRef` function, both of which are defined in [generated/index.d.ts](./index.d.ts):
+```typescript
+updateOrgGoogleCalendar(vars: UpdateOrgGoogleCalendarVariables): MutationPromise<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+
+interface UpdateOrgGoogleCalendarRef {
+  ...
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateOrgGoogleCalendarVariables): MutationRef<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+}
+export const updateOrgGoogleCalendarRef: UpdateOrgGoogleCalendarRef;
+```
+You can also pass in a `DataConnect` instance to the action shortcut function or `MutationRef` function.
+```typescript
+updateOrgGoogleCalendar(dc: DataConnect, vars: UpdateOrgGoogleCalendarVariables): MutationPromise<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+
+interface UpdateOrgGoogleCalendarRef {
+  ...
+  (dc: DataConnect, vars: UpdateOrgGoogleCalendarVariables): MutationRef<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+}
+export const updateOrgGoogleCalendarRef: UpdateOrgGoogleCalendarRef;
+```
+
+If you need the name of the operation without creating a ref, you can retrieve the operation name by calling the `operationName` property on the updateOrgGoogleCalendarRef:
+```typescript
+const name = updateOrgGoogleCalendarRef.operationName;
+console.log(name);
+```
+
+### Variables
+The `UpdateOrgGoogleCalendar` mutation requires an argument of type `UpdateOrgGoogleCalendarVariables`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+
+```typescript
+export interface UpdateOrgGoogleCalendarVariables {
+  orgId: UUIDString;
+  externalCalendarSyncEnabled?: boolean | null;
+  googleRefreshToken?: string | null;
+  googleAccessToken?: string | null;
+  googleTokenExpiry?: number | null;
+  externalCalendarId?: string | null;
+  externalCalendarType?: string | null;
+}
+```
+### Return Type
+Recall that executing the `UpdateOrgGoogleCalendar` mutation returns a `MutationPromise` that resolves to an object with a `data` property.
+
+The `data` property is an object of type `UpdateOrgGoogleCalendarData`, which is defined in [generated/index.d.ts](./index.d.ts). It has the following fields:
+```typescript
+export interface UpdateOrgGoogleCalendarData {
+  orgSetting_upsert: OrgSetting_Key;
+}
+```
+### Using `UpdateOrgGoogleCalendar`'s action shortcut function
+
+```typescript
+import { getDataConnect } from 'firebase/data-connect';
+import { connectorConfig, updateOrgGoogleCalendar, UpdateOrgGoogleCalendarVariables } from '@bridgeway/database';
+
+// The `UpdateOrgGoogleCalendar` mutation requires an argument of type `UpdateOrgGoogleCalendarVariables`:
+const updateOrgGoogleCalendarVars: UpdateOrgGoogleCalendarVariables = {
+  orgId: ..., 
+  externalCalendarSyncEnabled: ..., // optional
+  googleRefreshToken: ..., // optional
+  googleAccessToken: ..., // optional
+  googleTokenExpiry: ..., // optional
+  externalCalendarId: ..., // optional
+  externalCalendarType: ..., // optional
+};
+
+// Call the `updateOrgGoogleCalendar()` function to execute the mutation.
+// You can use the `await` keyword to wait for the promise to resolve.
+const { data } = await updateOrgGoogleCalendar(updateOrgGoogleCalendarVars);
+// Variables can be defined inline as well.
+const { data } = await updateOrgGoogleCalendar({ orgId: ..., externalCalendarSyncEnabled: ..., googleRefreshToken: ..., googleAccessToken: ..., googleTokenExpiry: ..., externalCalendarId: ..., externalCalendarType: ..., });
+
+// You can also pass in a `DataConnect` instance to the action shortcut function.
+const dataConnect = getDataConnect(connectorConfig);
+const { data } = await updateOrgGoogleCalendar(dataConnect, updateOrgGoogleCalendarVars);
+
+console.log(data.orgSetting_upsert);
+
+// Or, you can use the `Promise` API.
+updateOrgGoogleCalendar(updateOrgGoogleCalendarVars).then((response) => {
+  const data = response.data;
+  console.log(data.orgSetting_upsert);
+});
+```
+
+### Using `UpdateOrgGoogleCalendar`'s `MutationRef` function
+
+```typescript
+import { getDataConnect, executeMutation } from 'firebase/data-connect';
+import { connectorConfig, updateOrgGoogleCalendarRef, UpdateOrgGoogleCalendarVariables } from '@bridgeway/database';
+
+// The `UpdateOrgGoogleCalendar` mutation requires an argument of type `UpdateOrgGoogleCalendarVariables`:
+const updateOrgGoogleCalendarVars: UpdateOrgGoogleCalendarVariables = {
+  orgId: ..., 
+  externalCalendarSyncEnabled: ..., // optional
+  googleRefreshToken: ..., // optional
+  googleAccessToken: ..., // optional
+  googleTokenExpiry: ..., // optional
+  externalCalendarId: ..., // optional
+  externalCalendarType: ..., // optional
+};
+
+// Call the `updateOrgGoogleCalendarRef()` function to get a reference to the mutation.
+const ref = updateOrgGoogleCalendarRef(updateOrgGoogleCalendarVars);
+// Variables can be defined inline as well.
+const ref = updateOrgGoogleCalendarRef({ orgId: ..., externalCalendarSyncEnabled: ..., googleRefreshToken: ..., googleAccessToken: ..., googleTokenExpiry: ..., externalCalendarId: ..., externalCalendarType: ..., });
+
+// You can also pass in a `DataConnect` instance to the `MutationRef` function.
+const dataConnect = getDataConnect(connectorConfig);
+const ref = updateOrgGoogleCalendarRef(dataConnect, updateOrgGoogleCalendarVars);
 
 // Call `executeMutation()` on the reference to execute the mutation.
 // You can use the `await` keyword to wait for the promise to resolve.

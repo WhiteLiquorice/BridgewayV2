@@ -50,6 +50,23 @@ export interface Client_Key {
   __typename?: 'Client_Key';
 }
 
+export interface CreateBookingData {
+  booking_insert: Booking_Key;
+}
+
+export interface CreateBookingVariables {
+  orgId: UUIDString;
+  serviceId?: UUIDString | null;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  preferredDate?: DateString | null;
+  preferredTime?: string | null;
+  notes?: string | null;
+  status: string;
+  paymentStatus?: string | null;
+}
+
 export interface CreateOrgData {
   org_insert: Org_Key;
 }
@@ -83,6 +100,118 @@ export interface FloorZone_Key {
   __typename?: 'FloorZone_Key';
 }
 
+export interface GetAdminDashboardStatsData {
+  profiles: ({
+    id: UUIDString;
+  } & Profile_Key)[];
+    clients: ({
+      id: UUIDString;
+    } & Client_Key)[];
+      appointments: ({
+        id: UUIDString;
+      } & Appointment_Key)[];
+        services: ({
+          id: UUIDString;
+        } & Service_Key)[];
+          activityLogs: ({
+            id: UUIDString;
+            action: string;
+            createdAt: TimestampString;
+            userId?: string | null;
+          } & ActivityLog_Key)[];
+            recentClients: ({
+              id: UUIDString;
+            } & Client_Key)[];
+              recentAppts: ({
+                id: UUIDString;
+                status: string;
+                amount?: number | null;
+                createdAt: TimestampString;
+                cancellationReason?: string | null;
+              } & Appointment_Key)[];
+                weekAppts: ({
+                  id: UUIDString;
+                  amount?: number | null;
+                  scheduledAt: TimestampString;
+                } & Appointment_Key)[];
+                  todayAppts: ({
+                    id: UUIDString;
+                    amount?: number | null;
+                    status: string;
+                  } & Appointment_Key)[];
+}
+
+export interface GetAdminDashboardStatsVariables {
+  orgId: UUIDString;
+  thirtyDaysAgo: TimestampString;
+  sevenDaysAgo: TimestampString;
+  todayStart: TimestampString;
+  todayEnd: TimestampString;
+}
+
+export interface GetAppointmentsForDayData {
+  appointments: ({
+    scheduledAt: TimestampString;
+    service?: {
+      durationMinutes?: number | null;
+    };
+  })[];
+}
+
+export interface GetAppointmentsForDayVariables {
+  orgId: UUIDString;
+  startOfDay: TimestampString;
+  endOfDay: TimestampString;
+}
+
+export interface GetBookingByIdData {
+  booking?: {
+    id: UUIDString;
+    status: string;
+    paymentStatus?: string | null;
+    service?: {
+      id: UUIDString;
+      name: string;
+      price?: number | null;
+    } & Service_Key;
+  } & Booking_Key;
+}
+
+export interface GetBookingByIdVariables {
+  id: UUIDString;
+}
+
+export interface GetBookingPageDataData {
+  orgs: ({
+    id: UUIDString;
+    name: string;
+    logoUrl?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    layoutTheme?: string | null;
+    appTheme?: string | null;
+    stripePublishableKey?: string | null;
+    services_on_org: ({
+      id: UUIDString;
+      name: string;
+      description?: string | null;
+      durationMinutes?: number | null;
+      price?: number | null;
+    } & Service_Key)[];
+      orgSetting_on_org?: {
+        paymentRequired?: boolean | null;
+        externalCalendarSyncEnabled?: boolean | null;
+        stripeAccountId?: string | null;
+        bookingConfig?: unknown | null;
+        allowPhotoUpload?: boolean | null;
+      };
+  } & Org_Key)[];
+}
+
+export interface GetBookingPageDataVariables {
+  slug: string;
+}
+
 export interface GetOrgProfilesData {
   profiles: ({
     id: UUIDString;
@@ -105,17 +234,44 @@ export interface GetOrgSettingsData {
     paymentRequired?: boolean | null;
     stripeCustomerId?: string | null;
     stripeSubscriptionId?: string | null;
+    stripeAccountId?: string | null;
     paymentPastDue?: boolean | null;
     externalCalendarId?: string | null;
     externalCalendarType?: string | null;
     externalCalendarSyncEnabled?: boolean | null;
     disabledWidgets?: unknown | null;
     bookingConfig?: unknown | null;
+    allowPhotoUpload?: boolean | null;
   })[];
 }
 
 export interface GetOrgSettingsVariables {
   orgId: UUIDString;
+}
+
+export interface GetUpcomingBookingsData {
+  bookings: ({
+    id: UUIDString;
+    orgId: UUIDString;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    preferredDate?: DateString | null;
+    preferredTime?: string | null;
+    reminder24hSent?: boolean | null;
+    reminder2hSent?: boolean | null;
+    service?: {
+      name: string;
+    };
+  } & Booking_Key)[];
+}
+
+export interface GetUpcomingBookingsVariables {
+  status: string;
+  windowLo: DateString;
+  windowHi: DateString;
+  check24h?: boolean | null;
+  check2h?: boolean | null;
 }
 
 export interface GetUserProfileData {
@@ -245,6 +401,20 @@ export interface StaffShift_Key {
   __typename?: 'StaffShift_Key';
 }
 
+export interface UpdateBookingData {
+  booking_update?: Booking_Key | null;
+}
+
+export interface UpdateBookingVariables {
+  id: UUIDString;
+  status?: string | null;
+  paymentStatus?: string | null;
+  reminder24hSent?: boolean | null;
+  reminder2hSent?: boolean | null;
+  googleEventId?: string | null;
+  googleEventLink?: string | null;
+}
+
 export interface UpdateOrgBrandingData {
   org_update?: Org_Key | null;
 }
@@ -265,6 +435,20 @@ export interface UpdateOrgBrandingVariables {
   sessionTimeoutStaffMin?: number | null;
 }
 
+export interface UpdateOrgGoogleCalendarData {
+  orgSetting_upsert: OrgSetting_Key;
+}
+
+export interface UpdateOrgGoogleCalendarVariables {
+  orgId: UUIDString;
+  externalCalendarSyncEnabled?: boolean | null;
+  googleRefreshToken?: string | null;
+  googleAccessToken?: string | null;
+  googleTokenExpiry?: number | null;
+  externalCalendarId?: string | null;
+  externalCalendarType?: string | null;
+}
+
 export interface UpdateOrgSettingsData {
   orgSetting_upsert: OrgSetting_Key;
 }
@@ -273,6 +457,8 @@ export interface UpdateOrgSettingsVariables {
   orgId: UUIDString;
   disabledWidgets?: unknown | null;
   bookingConfig?: unknown | null;
+  allowPhotoUpload?: boolean | null;
+  paymentRequired?: boolean | null;
 }
 
 export interface UpdateProfileStatusData {
@@ -408,4 +594,100 @@ export const provisionOrgSettingRef: ProvisionOrgSettingRef;
 
 export function provisionOrgSetting(vars: ProvisionOrgSettingVariables): MutationPromise<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
 export function provisionOrgSetting(dc: DataConnect, vars: ProvisionOrgSettingVariables): MutationPromise<ProvisionOrgSettingData, ProvisionOrgSettingVariables>;
+
+interface GetAdminDashboardStatsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetAdminDashboardStatsVariables): QueryRef<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetAdminDashboardStatsVariables): QueryRef<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+  operationName: string;
+}
+export const getAdminDashboardStatsRef: GetAdminDashboardStatsRef;
+
+export function getAdminDashboardStats(vars: GetAdminDashboardStatsVariables, options?: ExecuteQueryOptions): QueryPromise<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+export function getAdminDashboardStats(dc: DataConnect, vars: GetAdminDashboardStatsVariables, options?: ExecuteQueryOptions): QueryPromise<GetAdminDashboardStatsData, GetAdminDashboardStatsVariables>;
+
+interface GetBookingPageDataRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetBookingPageDataVariables): QueryRef<GetBookingPageDataData, GetBookingPageDataVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetBookingPageDataVariables): QueryRef<GetBookingPageDataData, GetBookingPageDataVariables>;
+  operationName: string;
+}
+export const getBookingPageDataRef: GetBookingPageDataRef;
+
+export function getBookingPageData(vars: GetBookingPageDataVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingPageDataData, GetBookingPageDataVariables>;
+export function getBookingPageData(dc: DataConnect, vars: GetBookingPageDataVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingPageDataData, GetBookingPageDataVariables>;
+
+interface GetAppointmentsForDayRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetAppointmentsForDayVariables): QueryRef<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetAppointmentsForDayVariables): QueryRef<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+  operationName: string;
+}
+export const getAppointmentsForDayRef: GetAppointmentsForDayRef;
+
+export function getAppointmentsForDay(vars: GetAppointmentsForDayVariables, options?: ExecuteQueryOptions): QueryPromise<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+export function getAppointmentsForDay(dc: DataConnect, vars: GetAppointmentsForDayVariables, options?: ExecuteQueryOptions): QueryPromise<GetAppointmentsForDayData, GetAppointmentsForDayVariables>;
+
+interface GetBookingByIdRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetBookingByIdVariables): QueryRef<GetBookingByIdData, GetBookingByIdVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetBookingByIdVariables): QueryRef<GetBookingByIdData, GetBookingByIdVariables>;
+  operationName: string;
+}
+export const getBookingByIdRef: GetBookingByIdRef;
+
+export function getBookingById(vars: GetBookingByIdVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingByIdData, GetBookingByIdVariables>;
+export function getBookingById(dc: DataConnect, vars: GetBookingByIdVariables, options?: ExecuteQueryOptions): QueryPromise<GetBookingByIdData, GetBookingByIdVariables>;
+
+interface CreateBookingRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateBookingVariables): MutationRef<CreateBookingData, CreateBookingVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateBookingVariables): MutationRef<CreateBookingData, CreateBookingVariables>;
+  operationName: string;
+}
+export const createBookingRef: CreateBookingRef;
+
+export function createBooking(vars: CreateBookingVariables): MutationPromise<CreateBookingData, CreateBookingVariables>;
+export function createBooking(dc: DataConnect, vars: CreateBookingVariables): MutationPromise<CreateBookingData, CreateBookingVariables>;
+
+interface UpdateBookingRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateBookingVariables): MutationRef<UpdateBookingData, UpdateBookingVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: UpdateBookingVariables): MutationRef<UpdateBookingData, UpdateBookingVariables>;
+  operationName: string;
+}
+export const updateBookingRef: UpdateBookingRef;
+
+export function updateBooking(vars: UpdateBookingVariables): MutationPromise<UpdateBookingData, UpdateBookingVariables>;
+export function updateBooking(dc: DataConnect, vars: UpdateBookingVariables): MutationPromise<UpdateBookingData, UpdateBookingVariables>;
+
+interface GetUpcomingBookingsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetUpcomingBookingsVariables): QueryRef<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetUpcomingBookingsVariables): QueryRef<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+  operationName: string;
+}
+export const getUpcomingBookingsRef: GetUpcomingBookingsRef;
+
+export function getUpcomingBookings(vars: GetUpcomingBookingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+export function getUpcomingBookings(dc: DataConnect, vars: GetUpcomingBookingsVariables, options?: ExecuteQueryOptions): QueryPromise<GetUpcomingBookingsData, GetUpcomingBookingsVariables>;
+
+interface UpdateOrgGoogleCalendarRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateOrgGoogleCalendarVariables): MutationRef<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: UpdateOrgGoogleCalendarVariables): MutationRef<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+  operationName: string;
+}
+export const updateOrgGoogleCalendarRef: UpdateOrgGoogleCalendarRef;
+
+export function updateOrgGoogleCalendar(vars: UpdateOrgGoogleCalendarVariables): MutationPromise<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+export function updateOrgGoogleCalendar(dc: DataConnect, vars: UpdateOrgGoogleCalendarVariables): MutationPromise<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
 

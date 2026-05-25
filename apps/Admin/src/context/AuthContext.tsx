@@ -88,7 +88,13 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get('demo') === 'true') {
+    const isDemoParam = params.get('demo') === 'true'
+    const isDemoSession = sessionStorage.getItem('isDemo') === 'true'
+    
+    if (isDemoParam || isDemoSession) {
+      if (isDemoParam) {
+        sessionStorage.setItem('isDemo', 'true')
+      }
       setMockDemoSession()
       setLoading(false)
       return

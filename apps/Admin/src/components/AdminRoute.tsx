@@ -38,7 +38,12 @@ export default function AdminRoute() {
           <p className="text-gray-400 text-sm mb-6">
             You don&apos;t have permission to access the Admin panel.
           </p>
-          <Navigate to="/login" replace />
+          <button 
+            onClick={() => window.location.href = '/login'}
+            className="w-full bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 rounded-lg transition-colors"
+          >
+            Go to Login
+          </button>
         </div>
       </div>
     )
