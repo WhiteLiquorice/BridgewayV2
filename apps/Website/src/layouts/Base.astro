@@ -14,6 +14,8 @@ const {
   ogTitle = 'Bridgeway — Practice Management Software',
   ogDescription = 'Bridgeway is practice management software for appointment-based businesses. Scheduling, client portal, walk-in queue, and more.',
 } = Astro.props
+
+const canonicalUrl = new URL(Astro.url.pathname, 'https://bridgewayapps.com').toString()
 ---
 <!doctype html>
 <html lang="en">
@@ -22,12 +24,25 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Open Graph -->
     <meta property="og:title" content={ogTitle} />
     <meta property="og:description" content={ogDescription} />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content="https://bridgewayapps.com/og-image.png" />
+
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={ogTitle} />
     <meta name="twitter:description" content={ogDescription} />
+    <meta name="twitter:image" content="https://bridgewayapps.com/og-image.png" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

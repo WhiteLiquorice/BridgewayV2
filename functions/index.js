@@ -203,7 +203,7 @@ exports.createPaymentIntent = onCall({ cors: true }, async (request) => {
   }
 })
 
-exports.stripeWebhook = onRequest({ cors: true }, async (req, res) => {
+exports.stripeWebhook = onRequest({ cors: true, secrets: [sendgridApiKey, sendgridFromEmail] }, async (req, res) => {
   const sig = req.headers['stripe-signature']
   let event
   try {
@@ -351,6 +351,44 @@ exports.stripeWebhook = onRequest({ cors: true }, async (req, res) => {
         }
       } catch (err) {
         console.error('Failed to provision in Data Connect:', err)
+        // Alert admin about provisioning failure
+        try {
+          const alertHtml = `
+            <p style="margin:0 0 16px 0;font-weight:600;color:#cc0000;">⚠️ SaaS Provisioning Failed</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:0 0 16px 0;border:1px solid #eaeaea;border-radius:8px;overflow:hidden;">
+              <tr>
+                <td style="padding:12px 16px;background-color:#f9f9f9;font-weight:600;border-bottom:1px solid #eaeaea;width:140px;">Customer Email</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #eaeaea;">${email || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;background-color:#f9f9f9;font-weight:600;border-bottom:1px solid #eaeaea;">Org Name</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #eaeaea;">${orgName || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;background-color:#f9f9f9;font-weight:600;border-bottom:1px solid #eaeaea;">Session ID</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #eaeaea;font-size:13px;word-break:break-all;">${session.id || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;background-color:#f9f9f9;font-weight:600;border-bottom:1px solid #eaeaea;">Stripe Customer</td>
+                <td style="padding:12px 16px;border-bottom:1px solid #eaeaea;font-size:13px;">${customerId || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="padding:12px 16px;background-color:#f9f9f9;font-weight:600;">Error</td>
+                <td style="padding:12px 16px;color:#cc0000;">${err.message || String(err)}</td>
+              </tr>
+            </table>
+            <p style="margin:0;font-size:13px;color:#888888;">This customer paid but their org was not created. Manual intervention is required.</p>
+          `
+          await sendEmail({
+            toEmail: 'contact@bridgewayapps.com',
+            toName:  'Bridgeway Admin',
+            subject: `🚨 Provisioning Failed — ${email || 'Unknown Customer'}`,
+            text:    `SaaS provisioning failed for ${email || 'unknown'}. Session: ${session.id}. Error: ${err.message}. Manual intervention required.`,
+            html:    alertHtml,
+          }).catch(alertErr => console.error('Failed to send provisioning alert email:', alertErr.message))
+        } catch (alertErr) {
+          console.error('Failed to send provisioning alert email:', alertErr)
+        }
       }
     }
   }
@@ -430,11 +468,107 @@ function formatApptTime(isoString) {
   })
 }
 
-async function sendEmail({ toEmail, toName, subject, text }) {
+/**
+ * Wraps email body HTML in a branded, CAN-SPAM compliant template.
+ * Uses table-based layout with inline CSS for maximum email client compatibility.
+ * @param {string} subject - Email subject (used in preheader)
+ * @param {string} bodyHtml - Inner HTML content to wrap
+ * @returns {string} Full HTML email document
+ */
+function wrapInTemplate(subject, bodyHtml) {
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>${subject}</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;">
+  <!-- Preheader (hidden preview text) -->
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+    ${subject}
+  </div>
+
+  <!-- Outer wrapper -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f7;">
+    <tr>
+      <td align="center" style="padding:24px 16px;">
+
+        <!-- Inner container -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding:32px 40px 24px 40px;border-bottom:1px solid #eaeaea;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-size:28px;font-weight:700;color:#1a1a1a;letter-spacing:-0.5px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                    Bridgeway
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:4px;font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#888888;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                    Appointments
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 40px;font-size:16px;line-height:1.6;color:#333333;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+              ${bodyHtml}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px 32px 40px;border-top:1px solid #eaeaea;background-color:#fafafa;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="font-size:12px;line-height:1.5;color:#999999;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                    <p style="margin:0 0 8px 0;font-weight:600;color:#666666;">Bridgeway Apps LLC</p>
+                    <p style="margin:0 0 8px 0;">123 Main St, Austin, TX 78701</p>
+                    <p style="margin:0 0 8px 0;">
+                      You’re receiving this because you have an account or appointment with us.
+                    </p>
+                    <p style="margin:0;">
+                      <a href="mailto:unsubscribe@bridgewayapps.com?subject=Unsubscribe" style="color:#5b6abf;text-decoration:underline;">Unsubscribe</a>
+                      &nbsp;&middot;&nbsp;
+                      <a href="https://bridgewayapps.com/privacy" style="color:#5b6abf;text-decoration:underline;">Privacy Policy</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Inner container -->
+
+      </td>
+    </tr>
+  </table>
+  <!-- /Outer wrapper -->
+</body>
+</html>`
+}
+
+async function sendEmail({ toEmail, toName, subject, text, html }) {
   const apiKey   = sendgridApiKey.value()    || process.env.SENDGRID_API_KEY
   const fromAddr = sendgridFromEmail.value() || process.env.SENDGRID_FROM_EMAIL
   if (!apiKey || !fromAddr) { console.warn('SendGrid not configured'); return }
   sgMail.setApiKey(apiKey)
+
+  // Build inner HTML from explicit html param, or fall back to text
+  const innerHtml = html || `<p style="margin:0;">${text.replace(/\n/g, '<br>')}</p>`
+  const wrappedHtml = wrapInTemplate(subject, innerHtml)
+
   await sgMail.send({
     to:      { email: toEmail, name: toName },
     from:    { email: fromAddr, name: 'Bridgeway Appointments' },
@@ -474,7 +608,7 @@ exports.onBookingConfirmed = onDocumentUpdated(
     const clientName = after.clientName || after.name || 'there'
     const service    = after.serviceName || 'your appointment'
 
-    const emailBody = [
+    const emailText = [
       `Hi ${clientName},`,
       ``,
       `Your appointment for ${service} is confirmed!`,
@@ -485,6 +619,20 @@ exports.onBookingConfirmed = onDocumentUpdated(
       `See you soon!`,
     ].join('\n')
 
+    const emailHtml = `
+      <p style="margin:0 0 16px 0;">Hi ${clientName},</p>
+      <p style="margin:0 0 16px 0;">Your appointment for <strong>${service}</strong> is confirmed!</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;background-color:#f0f4ff;border-radius:8px;width:100%;">
+        <tr>
+          <td style="padding:16px 20px;font-size:16px;color:#1a1a1a;">
+            &#128197;&nbsp; <strong>${apptTime}</strong>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0 0 16px 0;">If you need to reschedule or cancel, please contact us as soon as possible.</p>
+      <p style="margin:0;">See you soon!</p>
+    `
+
     const smsBody = `Hi ${clientName}! Your ${service} appointment is confirmed for ${apptTime}. Questions? Just reply to this message.`
 
     const tasks = []
@@ -494,7 +642,8 @@ exports.onBookingConfirmed = onDocumentUpdated(
           toEmail:  after.clientEmail || after.email,
           toName:   clientName,
           subject:  `Your appointment is confirmed — ${service}`,
-          text:     emailBody,
+          text:     emailText,
+          html:     emailHtml,
         }).catch(err => console.error('Confirmation email failed:', err.message))
       )
     }
@@ -555,7 +704,7 @@ exports.send24hReminders = onSchedule(
       const clientName = booking.name || 'there'
       const service    = booking.service?.name || 'your appointment'
 
-      const emailBody = [
+      const emailText = [
         `Hi ${clientName},`,
         ``,
         `Just a reminder — your ${service} appointment is tomorrow.`,
@@ -564,11 +713,24 @@ exports.send24hReminders = onSchedule(
         `We look forward to seeing you!`,
       ].join('\n')
 
+      const emailHtml = `
+        <p style="margin:0 0 16px 0;">Hi ${clientName},</p>
+        <p style="margin:0 0 16px 0;">Just a friendly reminder &mdash; your <strong>${service}</strong> appointment is tomorrow.</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px 0;background-color:#f0f4ff;border-radius:8px;width:100%;">
+          <tr>
+            <td style="padding:16px 20px;font-size:16px;color:#1a1a1a;">
+              &#128197;&nbsp; <strong>${apptTime}</strong>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:0;">We look forward to seeing you!</p>
+      `
+
       const smsBody = `Reminder: Your ${service} appointment is tomorrow at ${apptTime}. Reply STOP to opt out.`
 
       const tasks = []
       if (ns.emailEnabled && booking.email) {
-        tasks.push(sendEmail({ toEmail: booking.email, toName: clientName, subject: `Appointment reminder — ${service} tomorrow`, text: emailBody }).catch(e => console.error(e.message)))
+        tasks.push(sendEmail({ toEmail: booking.email, toName: clientName, subject: `Appointment reminder — ${service} tomorrow`, text: emailText, html: emailHtml }).catch(e => console.error(e.message)))
       }
       if (ns.smsEnabled && booking.phone) {
         tasks.push(sendSms({ toPhone: booking.phone, body: smsBody }).catch(e => console.error(e.message)))
@@ -888,7 +1050,7 @@ exports.inviteToPortal = onCall(async (request) => {
     }
     const link = await admin.auth().generateSignInWithEmailLink(email, actionCodeSettings)
     
-    const emailBody = [
+    const emailText = [
       `Hi ${clientName || 'there'},`,
       ``,
       `You've been invited to access your client portal.`,
@@ -899,11 +1061,28 @@ exports.inviteToPortal = onCall(async (request) => {
       `If you didn't request this, you can safely ignore this email.`,
     ].join('\n')
 
+    const emailHtml = `
+      <p style="margin:0 0 16px 0;">Hi ${clientName || 'there'},</p>
+      <p style="margin:0 0 16px 0;">You\u2019ve been invited to access your client portal.</p>
+      <p style="margin:0 0 24px 0;">Click the button below to sign in instantly &mdash; no password needed:</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 24px auto;">
+        <tr>
+          <td align="center" style="background-color:#5b6abf;border-radius:8px;">
+            <a href="${link}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">Open My Portal</a>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0 0 8px 0;font-size:13px;color:#888888;">Or copy and paste this link into your browser:</p>
+      <p style="margin:0 0 16px 0;font-size:13px;word-break:break-all;"><a href="${link}" style="color:#5b6abf;">${link}</a></p>
+      <p style="margin:0;font-size:13px;color:#888888;">If you didn\u2019t request this, you can safely ignore this email.</p>
+    `
+
     await sendEmail({
       toEmail: email,
       toName: clientName || email,
       subject: 'Your Client Portal Invite',
-      text: emailBody
+      text: emailText,
+      html: emailHtml,
     })
 
     return { success: true, note: `Invite sent to ${email}.` }

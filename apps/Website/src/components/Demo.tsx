@@ -178,6 +178,11 @@ function LuxurySidebar({ activePage, setActivePage }: { activePage: PageId; setA
           Get Started
         </button>
         <p className="text-[10px] text-neutral-400 text-center pt-1">&copy; {new Date().getFullYear()} Bridgeway Apps</p>
+        <div className="flex items-center justify-center gap-3 mt-1">
+          <a href="/terms" className="text-[10px] text-neutral-400 hover:text-neutral-600 transition-colors">Terms</a>
+          <span className="text-neutral-300">·</span>
+          <a href="/privacy" className="text-[10px] text-neutral-400 hover:text-neutral-600 transition-colors">Privacy</a>
+        </div>
       </div>
     </aside>
   )
@@ -1054,7 +1059,7 @@ function PricingSection() {
                 </span>
               </div>
               <div className="flex items-baseline gap-1 mt-4 mb-6">
-                <span className="font-serif text-4xl text-neutral-900 tracking-tight">$105</span>
+                <span className="font-serif text-4xl text-neutral-900 tracking-tight">$40</span>
                 <span className="text-sm text-neutral-400 ml-2">/ month</span>
               </div>
               <div className="space-y-2.5">
@@ -1086,7 +1091,7 @@ function PricingSection() {
                 </span>
               </div>
               <div className="flex items-baseline gap-1 mt-4 mb-2">
-                <span className="font-serif text-4xl text-neutral-900 tracking-tight">$375</span>
+                <span className="font-serif text-4xl text-neutral-900 tracking-tight">$300</span>
                 <span className="text-sm text-neutral-400 ml-2">/ month</span>
               </div>
               <p className="text-xs text-neutral-400 mb-6">

@@ -3,6 +3,7 @@ import tailwind from '@astrojs/tailwind'
 import react from '@astrojs/react'
 
 export default defineConfig({
+  site: 'https://bridgewayapps.com',
   integrations: [tailwind(), react()],
-  output: 'static',  // static output (can switch to 'server' with Vercel adapter if needed)
+  output: 'static',
 })

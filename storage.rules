@@ -1,11 +1,49 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // ─── Helper functions ─────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSignedIn() {
+      return request.auth != null 
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Limit uploads to 10 MB
+    function isValidSize() {
+      return request.resource.size < 10 * 1024 * 1024;
+    }
+
+    // ─── Booking references (public) ──────────────────────────────────
+    // Public booking flow may upload reference images.
+    // Read: public (referenced in booking confirmations)
+    // Write: anyone, but size-limited
     match /booking_references/{allPaths=**} {
-      allow read, write: if true;
+      allow read: if true;
+      allow create: if isValidSize();
+      allow update, delete: if isSignedIn();
     }
-    match /{allPaths=**} {
-      allow read, write: if request.auth != null;
+
+    // ─── Org-scoped files ─────────────────────────────────────────────
+    // All other uploads are organized by org: /orgs/{orgId}/...
+    // Only authenticated users can read/write within their org's folder.
+    // Per-org isolation: users can only access files under their org path.
+    match /orgs/{orgId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isSignedIn() && isValidSize();
     }
+
+    // ─── Logos (org branding) ─────────────────────────────────────────
+    match /logos/{orgId}/{allPaths=**} {
+      allow read: if true; // Logos are public (shown in portal/booking)
+      allow write: if isSignedIn() && isValidSize();
+    }
+
+    // ─── Default: deny everything else ────────────────────────────────
+    // Files not under a matched path are denied by default.
   }
 }

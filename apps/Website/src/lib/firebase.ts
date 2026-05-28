@@ -15,3 +15,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
+
+// Initialize Analytics (browser only — Astro SSG may run in Node)
+if (typeof window !== 'undefined') {
+  import('firebase/analytics').then(({ getAnalytics }) => {
+    getAnalytics(app);
+  });
+}
