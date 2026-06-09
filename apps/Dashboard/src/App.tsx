@@ -21,6 +21,8 @@ import Queue           from './pages/Queue'
 import StaffSchedule   from './pages/StaffSchedule'
 import Reports         from './pages/Reports'
 import Checkout        from './pages/Checkout'
+import Inventory       from './pages/Inventory'
+import ClientImporter  from './pages/ClientImporter'
 
 function AppContent() {
   const { loading } = useAuth()
@@ -48,6 +50,8 @@ function AppContent() {
               <Route path="/appointments"          element={<Appointments />} />
               <Route path="/clients"               element={<Clients />} />
               <Route path="/clients/:id"           element={<ClientDetail />} />
+              <Route path="/clients/import"        element={<ClientImporter />} />
+              <Route path="/inventory"             element={<Inventory />} />
               <Route path="/revenue"               element={<Revenue />} />
               <Route path="/availability"          element={<Availability />} />
               <Route path="/classes"               element={<Classes />} />

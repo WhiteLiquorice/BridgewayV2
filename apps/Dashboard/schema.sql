@@ -602,13 +602,14 @@ ALTER TABLE orgs ADD COLUMN IF NOT EXISTS onboarding_complete boolean DEFAULT fa
 -- ─── POS / Checkout ──────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS products (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  org_id      uuid REFERENCES orgs NOT NULL,
-  name        text NOT NULL,
-  price_cents integer NOT NULL,
-  stock_count integer,
-  is_active   boolean DEFAULT true,
-  created_at  timestamptz DEFAULT now()
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id              uuid REFERENCES orgs NOT NULL,
+  name                text NOT NULL,
+  price_cents         integer NOT NULL,
+  stock_count         integer,
+  low_stock_threshold integer DEFAULT 10,
+  is_active           boolean DEFAULT true,
+  created_at          timestamptz DEFAULT now()
 );
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Staff can manage products"

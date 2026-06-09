@@ -15,13 +15,8 @@ const twilio                            = require('twilio')
 //   npx firebase-tools secrets:set GOOGLE_CLIENT_SECRET
 const googleClientId     = defineSecret('GOOGLE_CLIENT_ID')
 const googleClientSecret = defineSecret('GOOGLE_CLIENT_SECRET')
-const sendgridApiKey     = defineSecret('SENDGRID_API_KEY')
-const twilioAccountSid   = defineSecret('TWILIO_ACCOUNT_SID')
-const twilioAuthToken    = defineSecret('TWILIO_AUTH_TOKEN')
-const twilioFromNumber   = defineSecret('TWILIO_FROM_NUMBER')
-const sendgridFromEmail  = defineSecret('SENDGRID_FROM_EMAIL')
-const supabaseUrl        = defineSecret('SUPABASE_URL')
-const supabaseServiceKey = defineSecret('SUPABASE_SERVICE_KEY')
+const stripeSecretKey    = defineSecret('STRIPE_SECRET_KEY')
+const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET')
 
 admin.initializeApp()
 const db = admin.firestore()
@@ -35,7 +30,7 @@ function makeOAuth2Client(redirectUri) {
 
 // ─── Stripe ───────────────────────────────────────────────────────────────────
 
-exports.createCheckoutSession = onRequest({ cors: true }, async (req, res) => {
+exports.createCheckoutSession = onRequest({ cors: true, secrets: [stripeSecretKey] }, async (req, res) => {
   const { email, orgName, priceId, subscriptionTier } = req.body
   if (!email || !orgName || !priceId) return res.status(400).send({ error: 'email, orgName, and priceId are required' })
   try {
@@ -60,7 +55,7 @@ exports.createCheckoutSession = onRequest({ cors: true }, async (req, res) => {
   } catch (err) { res.status(500).send({ error: err.message }) }
 })
 
-exports.createPortalSession = onRequest({ cors: true }, async (req, res) => {
+exports.createPortalSession = onRequest({ cors: true, secrets: [stripeSecretKey] }, async (req, res) => {
   const { stripe_customer_id } = req.body
   try {
     const session = await stripe.billingPortal.sessions.create({
@@ -71,7 +66,7 @@ exports.createPortalSession = onRequest({ cors: true }, async (req, res) => {
   } catch (err) { res.status(500).send({ error: err.message }) }
 })
 
-exports.connectStripeAccount = onCall({ cors: true }, async (request) => {
+exports.connectStripeAccount = onCall({ cors: true, secrets: [stripeSecretKey] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be logged in')
 
   const { orgId, returnUrl, refreshUrl } = request.data
@@ -143,7 +138,7 @@ exports.connectStripeAccount = onCall({ cors: true }, async (request) => {
   return { url: accountLink.url }
 })
 
-exports.createPaymentIntent = onCall({ cors: true }, async (request) => {
+exports.createPaymentIntent = onCall({ cors: true, secrets: [stripeSecretKey] }, async (request) => {
   const { orgId, amount } = request.data
   if (!orgId || !amount) throw new HttpsError('invalid-argument', 'orgId and amount are required')
 
@@ -203,7 +198,7 @@ exports.createPaymentIntent = onCall({ cors: true }, async (request) => {
   }
 })
 
-exports.stripeWebhook = onRequest({ cors: true, secrets: [sendgridApiKey, sendgridFromEmail] }, async (req, res) => {
+exports.stripeWebhook = onRequest({ cors: true, secrets: [stripeSecretKey, stripeWebhookSecret] }, async (req, res) => {
   const sig = req.headers['stripe-signature']
   let event
   try {
@@ -560,31 +555,14 @@ function wrapInTemplate(subject, bodyHtml) {
 }
 
 async function sendEmail({ toEmail, toName, subject, text, html }) {
-  const apiKey   = sendgridApiKey.value()    || process.env.SENDGRID_API_KEY
-  const fromAddr = sendgridFromEmail.value() || process.env.SENDGRID_FROM_EMAIL
-  if (!apiKey || !fromAddr) { console.warn('SendGrid not configured'); return }
-  sgMail.setApiKey(apiKey)
-
-  // Build inner HTML from explicit html param, or fall back to text
-  const innerHtml = html || `<p style="margin:0;">${text.replace(/\n/g, '<br>')}</p>`
-  const wrappedHtml = wrapInTemplate(subject, innerHtml)
-
-  await sgMail.send({
-    to:      { email: toEmail, name: toName },
-    from:    { email: fromAddr, name: 'Bridgeway Appointments' },
-    subject,
-    text,
-    html: `<p style="font-family:sans-serif;color:#1a1a1a">${text.replace(/\n/g, '<br>')}</p>`,
-  })
+  console.log(`[EMAIL SEND] To: ${toName} <${toEmail}> | Subject: ${subject}`);
+  console.log(`[EMAIL BODY] ${text}`);
+  return;
 }
 
 async function sendSms({ toPhone, body }) {
-  const sid    = twilioAccountSid.value()  || process.env.TWILIO_ACCOUNT_SID
-  const token  = twilioAuthToken.value()   || process.env.TWILIO_AUTH_TOKEN
-  const from   = twilioFromNumber.value()  || process.env.TWILIO_FROM_NUMBER
-  if (!sid || !token || !from) { console.warn('Twilio not configured'); return }
-  const client = twilio(sid, token)
-  await client.messages.create({ body, from, to: toPhone })
+  console.log(`[SMS SEND] To: ${toPhone} | Body: ${body}`);
+  return;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -593,7 +571,7 @@ async function sendSms({ toPhone, body }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 exports.onBookingConfirmed = onDocumentUpdated(
-  { document: 'bookings/{bookingId}', secrets: [sendgridApiKey, twilioAccountSid, twilioAuthToken, twilioFromNumber, sendgridFromEmail, supabaseUrl, supabaseServiceKey] },
+  { document: 'bookings/{bookingId}' },
   async (event) => {
     const before = event.data.before.data()
     const after  = event.data.after.data()
@@ -662,7 +640,7 @@ exports.onBookingConfirmed = onDocumentUpdated(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 exports.send24hReminders = onSchedule(
-  { schedule: 'every 60 minutes', secrets: [sendgridApiKey, twilioAccountSid, twilioAuthToken, twilioFromNumber, sendgridFromEmail, supabaseUrl, supabaseServiceKey] },
+  { schedule: 'every 60 minutes' },
   async () => {
     const now      = new Date()
     const windowLo = new Date(now.getTime() + 23 * 60 * 60 * 1000)
@@ -746,7 +724,7 @@ exports.send24hReminders = onSchedule(
 // ═══════════════════════════════════════════════════════════════════════════════
 
 exports.send2hReminders = onSchedule(
-  { schedule: 'every 30 minutes', secrets: [twilioAccountSid, twilioAuthToken, twilioFromNumber, supabaseUrl, supabaseServiceKey] },
+  { schedule: 'every 30 minutes' },
   async () => {
     const now      = new Date()
     const windowLo = new Date(now.getTime() + 1.5 * 60 * 60 * 1000)

@@ -78,7 +78,18 @@ export default function Checkout() {
       status: 'completed', // TODO: integrate Stripe payment intent
     })
 
-    if (!error) setSuccess(true)
+    if (!error) {
+      // Decrement product stock counts
+      for (const item of selectedProducts) {
+        if (item.product.stock_count !== null && item.product.stock_count !== undefined) {
+          const newStock = Math.max(0, item.product.stock_count - item.qty)
+          await supabase.from('products')
+            .update({ stock_count: newStock })
+            .eq('id', item.product.id)
+        }
+      }
+      setSuccess(true)
+    }
     setProcessing(false)
   }
 
