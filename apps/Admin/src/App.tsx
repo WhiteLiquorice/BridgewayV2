@@ -21,6 +21,20 @@ import Commissions from './pages/Commissions'
 import Marketing from './pages/Marketing'
 import Inventory from './pages/Inventory'
 import Analytics from './pages/Analytics'
+import Campaigns from './pages/Campaigns'
+import CapacityPlanning from './pages/CapacityPlanning'
+import ClientSegments from './pages/ClientSegments'
+import ClientValue from './pages/ClientValue'
+import Expenses from './pages/Expenses'
+import FeedbackAnalytics from './pages/FeedbackAnalytics'
+import GiftCards from './pages/GiftCards'
+import Integrations from './pages/Integrations'
+import RecurringRevenue from './pages/RecurringRevenue'
+import Reports from './pages/Reports'
+import ServiceAnalytics from './pages/ServiceAnalytics'
+import StaffPerformance from './pages/StaffPerformance'
+import StaffScheduling from './pages/StaffScheduling'
+
 
 export default function App() {
   return (
@@ -67,6 +81,19 @@ function AppContent() {
               <Route path="/marketing"        element={<Marketing />} />
               <Route path="/inventory"        element={<Inventory />} />
               <Route path="/analytics"        element={<Analytics />} />
+              <Route path="/campaigns"        element={<Campaigns />} />
+              <Route path="/capacity"         element={<CapacityPlanning />} />
+              <Route path="/segments"         element={<ClientSegments />} />
+              <Route path="/client-value"     element={<ClientValue />} />
+              <Route path="/expenses"         element={<Expenses />} />
+              <Route path="/feedback"         element={<FeedbackAnalytics />} />
+              <Route path="/gift-cards"       element={<GiftCards />} />
+              <Route path="/integrations"     element={<Integrations />} />
+              <Route path="/recurring-revenue" element={<RecurringRevenue />} />
+              <Route path="/reports"          element={<Reports />} />
+              <Route path="/service-analytics" element={<ServiceAnalytics />} />
+              <Route path="/staff-performance" element={<StaffPerformance />} />
+              <Route path="/staff-scheduling"  element={<StaffScheduling />} />
             </Route>
           </Route>
 

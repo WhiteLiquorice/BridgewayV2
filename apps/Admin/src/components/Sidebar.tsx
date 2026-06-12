@@ -94,19 +94,80 @@ function BoxIcon() {
   )
 }
 
+function CalendarIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  )
+}
+function UsersGroupIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+    </svg>
+  )
+}
+function CurrencyIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <line x1="12" y1="1" x2="12" y2="23" />
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  )
+}
+function DocumentReportIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+    </svg>
+  )
+}
+function AdjustmentsIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+    </svg>
+  )
+}
+
 const nav = [
-  { to: '/home',          label: 'Home',           icon: HomeIcon,       section: null },
-  { to: '/org-setup',     label: 'Org Setup',      icon: BuildingIcon,   section: null },
-  { to: '/users',         label: 'Users',          icon: UsersIcon,      section: null },
-  { to: '/billing',       label: 'Billing',        icon: CreditCardIcon, section: null },
-  { to: '/services',      label: 'Services',       icon: TagIcon,        section: null },
-  { to: '/memberships',   label: 'Memberships',    icon: PackageIcon,    section: null },
-  { to: '/notifications', label: 'Notifications',  icon: BellIcon,       section: null },
-  { to: '/activity',      label: 'Activity Log',   icon: ActivityIcon,   section: null },
-  { to: '/commissions',   label: 'Commissions',    icon: ChartIcon,      section: 'Growth' },
-  { to: '/marketing',     label: 'Marketing',      icon: MegaphoneIcon,  section: 'Growth' },
-  { to: '/inventory',     label: 'Inventory',      icon: BoxIcon,        section: 'Growth' },
-  { to: '/analytics',     label: 'Analytics',      icon: ChartIcon,      section: 'Growth' },
+  { to: '/home',          label: 'Home',           icon: HomeIcon,           section: null },
+  { to: '/org-setup',     label: 'Org Setup',      icon: BuildingIcon,       section: null },
+  { to: '/users',         label: 'Users',          icon: UsersIcon,          section: null },
+  { to: '/billing',       label: 'Billing',        icon: CreditCardIcon,     section: null },
+  { to: '/services',      label: 'Services',       icon: TagIcon,            section: null },
+  { to: '/memberships',   label: 'Memberships',    icon: PackageIcon,        section: null },
+  { to: '/notifications', label: 'Notifications',  icon: BellIcon,           section: null },
+  { to: '/activity',      label: 'Activity Log',   icon: ActivityIcon,       section: null },
+  
+  // Growth
+  { to: '/commissions',   label: 'Commissions',    icon: ChartIcon,          section: 'Growth' },
+  { to: '/marketing',     label: 'Marketing',      icon: MegaphoneIcon,      section: 'Growth' },
+  { to: '/campaigns',     label: 'Campaigns',      icon: MegaphoneIcon,      section: 'Growth' },
+  { to: '/segments',      label: 'Client Segments',icon: UsersGroupIcon,      section: 'Growth' },
+  { to: '/client-value',  label: 'Client Value',   icon: UsersGroupIcon,      section: 'Growth' },
+  { to: '/recurring-revenue', label: 'Recurring Revenue', icon: CurrencyIcon,  section: 'Growth' },
+  
+  // Operations
+  { to: '/inventory',     label: 'Inventory',      icon: BoxIcon,            section: 'Operations' },
+  { to: '/staff-scheduling', label: 'Staff Scheduling', icon: CalendarIcon,   section: 'Operations' },
+  { to: '/capacity',      label: 'Capacity Planning', icon: CalendarIcon,    section: 'Operations' },
+  { to: '/feedback',      label: 'Feedback',       icon: DocumentReportIcon, section: 'Operations' },
+  { to: '/integrations',  label: 'Integrations',   icon: AdjustmentsIcon,    section: 'Operations' },
+  
+  // Finance
+  { to: '/gift-cards',    label: 'Gift Cards',     icon: CurrencyIcon,       section: 'Finance' },
+  { to: '/expenses',      label: 'Expenses',       icon: CurrencyIcon,       section: 'Finance' },
+  
+  // Analytics
+  { to: '/analytics',     label: 'Analytics',      icon: ChartIcon,          section: 'Analytics' },
+  { to: '/service-analytics', label: 'Service Analytics', icon: DocumentReportIcon, section: 'Analytics' },
+  { to: '/staff-performance', label: 'Staff Performance', icon: DocumentReportIcon, section: 'Analytics' },
+  { to: '/reports',       label: 'Reports',        icon: DocumentReportIcon, section: 'Analytics' },
 ]
 
 export default function Sidebar() {
