@@ -1,6 +1,8 @@
 /** Cache-buster: 2026-04-27-2000 */
 import { useState, useEffect, useRef } from 'react'
 import { auth } from '@bridgeway/ui';
+import JumpingShip from './JumpingShip';
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Bridgeway marketing site — luxury shell, sidebar nav.
 //
@@ -54,6 +56,14 @@ function HelpIcon() {
     </svg>
   )
 }
+function RocketIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.58-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
+    </svg>
+  )
+}
+
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
 
@@ -93,7 +103,7 @@ function ToastItemEl({ t, onDismiss }: { t: ToastItem; onDismiss: (id: number) =
 
 // ─── Sidebar (light, luxury) ─────────────────────────────────────────────────
 
-type PageId = 'dashboard' | 'portal' | 'interactive' | 'pricing' | 'faq'
+type PageId = 'dashboard' | 'portal' | 'interactive' | 'pricing' | 'faq' | 'jump'
 
 const NAV_ITEMS: { id: PageId; label: string; hint?: string; Icon: () => JSX.Element }[] = [
   { id: 'dashboard',   label: 'Front Desk',       hint: 'What your staff sees',  Icon: DashboardIcon },
@@ -101,7 +111,9 @@ const NAV_ITEMS: { id: PageId; label: string; hint?: string; Icon: () => JSX.Ele
   { id: 'interactive', label: 'Admin Panel',       hint: 'Org setup',             Icon: SettingsIcon },
   { id: 'pricing',     label: 'Pricing',          Icon: TagIcon },
   { id: 'faq',         label: 'FAQ',              Icon: HelpIcon },
+  { id: 'jump',        label: 'Jumping Ship',     hint: 'Migrate your client list', Icon: RocketIcon },
 ]
+
 
 function LuxurySidebar({ activePage, setActivePage }: { activePage: PageId; setActivePage: (id: PageId) => void }) {
   return (
@@ -1695,6 +1707,12 @@ export default function Demo() {
         )}
         {activePage === 'pricing' && <PricingSection />}
         {activePage === 'faq'     && <FAQSection />}
+        {activePage === 'jump'    && (
+          <div className="p-8 max-w-4xl mx-auto">
+            <JumpingShip />
+          </div>
+        )}
+
       </main>
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />

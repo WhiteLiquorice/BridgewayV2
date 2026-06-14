@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { getAdminDashboardStats } from '@bridgeway/database'
+import { VideoSandbox } from '@bridgeway/ui'
+
 
 function PulseCard({ label, value, subtext, icon, alert = false }) {
   return (
@@ -263,6 +265,15 @@ export default function Home() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Video Overview & Sandbox walkthrough */}
+            <div className="lg:col-span-3">
+              <VideoSandbox 
+                ctaLink="/clients/import" 
+                title="Clinic Overview & Automated Sandbox Tour"
+                description="Watch this 5-minute video walkthrough to see how to run automated waitlists, coordinate check-ins, and manage expenses. When ready, initialize a custom sandbox with your client database."
+              />
             </div>
           </div>
         </>
