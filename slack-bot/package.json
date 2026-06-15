@@ -1,0 +1,14 @@
+{
+  "name": "slack-bridge-bot",
+  "version": "1.0.0",
+  "description": "Local bridge connecting Slack Socket Mode messages to Antigravity file queue",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.21.4",
+    "dotenv": "^16.4.5"
+  },
+  "private": true
+}

@@ -1,0 +1,4 @@
+.env
+node_modules/
+inbox.json
+outbox.json

@@ -3,6 +3,8 @@ import { getAuth } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { getStorage } from 'firebase/storage'
+import { getDataConnect } from 'firebase/data-connect'
+import { connectorConfig } from '@bridgeway/database'
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -19,6 +21,7 @@ export const auth = getAuth(app)
 export const db   = getFirestore(app)
 export const fns  = getFunctions(app)
 export const storage = getStorage(app)
+export const dataconnect = getDataConnect(app, connectorConfig)
 
 // ── Typed callable wrappers ───────────────────────────────────────────────────
 
