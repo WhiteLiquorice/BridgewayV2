@@ -2,8 +2,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { assign, createMachine } from 'xstate'
 import { useMachine } from '@xstate/react'
-import { supabase } from '../lib/supabase'
-import { fns, storage } from '../lib/firebase'
+import { auth, fns, storage } from '../lib/firebase'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 import { httpsCallable } from 'firebase/functions'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import StripePayment from '../components/StripePayment'
@@ -208,12 +208,10 @@ export default function Book() {
 
   // Check if already logged in — skip account prompt if so
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setAlreadyLoggedIn(true)
-        setAccountMode('guest')
-      }
-    })
+    if (auth.currentUser) {
+      setAlreadyLoggedIn(true)
+      setAccountMode('guest')
+    }
   }, [])
 
   useEffect(() => {
@@ -328,15 +326,10 @@ export default function Book() {
         return
       }
       setAccountError('')
-      const { error } = await supabase.auth.signUp({
-        email: details.email,
-        password: accountPassword,
-        options: {
-          data: { full_name: details.name, role: 'patient', org_id: org.id },
-        },
-      })
-      if (error) {
-        setAccountError(error.message)
+      try {
+        await createUserWithEmailAndPassword(auth, details.email, accountPassword)
+      } catch (err: any) {
+        setAccountError(err.message || 'Failed to create account.')
         return
       }
     } else if (accountMode === 'signin') {
@@ -345,12 +338,10 @@ export default function Book() {
         return
       }
       setAccountError('')
-      const { error } = await supabase.auth.signInWithPassword({
-        email: details.email,
-        password: accountPassword,
-      })
-      if (error) {
-        setAccountError(error.message)
+      try {
+        await signInWithEmailAndPassword(auth, details.email, accountPassword)
+      } catch (err: any) {
+        setAccountError(err.message || 'Failed to sign in.')
         return
       }
     }

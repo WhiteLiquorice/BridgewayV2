@@ -343,3 +343,102 @@ mutation UpdateOrgGoogleCalendar(
   })
 }
 
+# New mutations and queries for migrating Booking & Dashboard apps off Supabase
+
+query GetClientByEmail($orgId: UUID!, $email: String!) @auth(level: NO_ACCESS) {
+  clients(where: { orgId: { eq: $orgId }, email: { eq: $email } }) {
+    id
+    name
+    email
+    phone
+  }
+}
+
+query GetClientAppointments($clientId: UUID!) @auth(level: NO_ACCESS) {
+  appointments(where: { clientId: { eq: $clientId } }, orderBy: [{ scheduledAt: DESC }]) {
+    id
+    scheduledAt
+    durationMinutes
+    status
+    amount
+    notes
+    service {
+      name
+    }
+  }
+}
+
+mutation UpdateAppointmentStatus($id: UUID!, $status: String!) @auth(level: USER) {
+  appointment_update(id: $id, data: { status: $status })
+}
+
+query GetOrgAppointments($orgId: UUID!) @auth(level: USER) {
+  appointments(where: { orgId: { eq: $orgId } }, orderBy: [{ scheduledAt: DESC }]) {
+    id
+    scheduledAt
+    status
+    amount
+    notes
+    client {
+      id
+      name
+    }
+    service {
+      name
+    }
+  }
+}
+
+mutation CreateAppointment(
+  $orgId: UUID!,
+  $clientId: UUID!,
+  $serviceId: UUID,
+  $scheduledAt: Timestamp!,
+  $status: String!,
+  $amount: Float!,
+  $notes: String
+) @auth(level: USER) {
+  appointment_insert(data: {
+    orgId: $orgId,
+    clientId: $clientId,
+    serviceId: $serviceId,
+    scheduledAt: $scheduledAt,
+    status: $status,
+    amount: $amount,
+    notes: $notes
+  })
+}
+
+query GetActiveServices($orgId: UUID!) @auth(level: USER) {
+  services(where: { orgId: { eq: $orgId }, isArchived: { eq: false } }, orderBy: [{ name: ASC }]) {
+    id
+    name
+    price
+  }
+}
+
+query SearchClients($orgId: UUID!, $query: String!) @auth(level: USER) {
+  clients(where: { orgId: { eq: $orgId }, name: { contains: $query } }, limit: 8) {
+    id
+    name
+    email
+  }
+}
+
+mutation CreateService(
+  $orgId: UUID!,
+  $name: String!,
+  $description: String,
+  $durationMinutes: Int!,
+  $price: Float!
+) @auth(level: USER) {
+  service_insert(data: {
+    orgId: $orgId,
+    name: $name,
+    description: $description,
+    durationMinutes: $durationMinutes,
+    price: $price,
+    isArchived: false
+  })
+}
+

@@ -115,6 +115,16 @@ const nav = [
       </svg>
     ),
   },
+  {
+    to: '/magic-setup',
+    label: 'Magic Setup',
+    icon: (
+      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M9.813 15.904L9 21l8.913-6.236m-8.913 0a11.97 11.97 0 001.691-8.337L9.813 15.904z" />
+      </svg>
+    ),
+  },
 ]
 
 export default function Sidebar({ onOpenShortcuts }) {

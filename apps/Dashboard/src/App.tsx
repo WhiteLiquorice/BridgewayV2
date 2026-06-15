@@ -23,6 +23,7 @@ import Reports         from './pages/Reports'
 import Checkout        from './pages/Checkout'
 import Inventory       from './pages/Inventory'
 import ClientImporter  from './pages/ClientImporter'
+import MagicSetup     from './pages/MagicSetup'
 
 function AppContent() {
   const { loading } = useAuth()
@@ -60,6 +61,7 @@ function AppContent() {
               <Route path="/reports"               element={<Reports />} />
               <Route path="/settings"              element={<Settings />} />
               <Route path="/checkout"              element={<Checkout />} />
+              <Route path="/magic-setup"           element={<MagicSetup />} />
             </Route>
           </Route>
 

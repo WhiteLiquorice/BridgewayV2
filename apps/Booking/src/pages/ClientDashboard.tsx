@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getClientByEmail, getClientAppointments, updateAppointmentStatus } from '@bridgeway/database'
 
 function StatusBadge({ status }: { status: string }) {
   const styles = {
@@ -39,24 +40,27 @@ export default function ClientDashboard() {
   async function fetchData() {
     setLoading(true)
     try {
-      // 1. Resolve client record in Supabase
-      const { data: clientRecord } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('org_id', profile.org_id)
-        .eq('email', profile.email)
-        .maybeSingle()
-
+      // 1. Resolve client record in Firebase DataConnect
+      const { data: clientData } = await getClientByEmail(dataconnect, {
+        orgId: profile.org_id,
+        email: profile.email
+      })
+      const clientRecord = clientData.clients[0]
       const clientId = clientRecord?.id || profile.id
 
       // 2. Fetch appointments
-      const { data: appts } = await supabase
-        .from('appointments')
-        .select('*, services(name)')
-        .eq('client_id', clientId)
-        .order('scheduled_at', { ascending: false })
+      const { data: apptsData } = await getClientAppointments(dataconnect, {
+        clientId
+      })
 
-      setAppointments(appts || [])
+      const mapped = (apptsData.appointments || []).map((appt: any) => ({
+        ...appt,
+        scheduled_at: appt.scheduledAt,
+        duration_minutes: appt.durationMinutes,
+        services: appt.service ? { name: appt.service.name } : null
+      }))
+
+      setAppointments(mapped)
     } catch (err) {
       console.error('Error fetching dashboard data:', err)
     } finally {
@@ -84,12 +88,10 @@ export default function ClientDashboard() {
   async function handleCancel(appt: any) {
     if (!window.confirm(`Are you sure you want to cancel your appointment?`)) return
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: 'cancelled' })
-        .eq('id', appt.id)
-
-      if (error) throw error
+      await updateAppointmentStatus(dataconnect, {
+        id: appt.id,
+        status: 'cancelled'
+      })
       setCancelMsg({ type: 'success', text: 'Appointment cancelled successfully.' })
       fetchData()
     } catch (err: any) {

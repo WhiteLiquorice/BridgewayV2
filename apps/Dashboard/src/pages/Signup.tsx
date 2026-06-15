@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { auth } from '../lib/firebase'
+import { createUserWithEmailAndPassword } from 'firebase/auth'
 
 export default function Signup() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e) {
@@ -14,15 +15,12 @@ export default function Signup() {
     setError(null)
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({ email, password })
-
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-    } else {
-      // Supabase sends a confirmation email by default.
-      // If email confirmation is disabled in your project, the user is logged in immediately.
+    try {
+      await createUserWithEmailAndPassword(auth, email, password)
       navigate('/')
+    } catch (err: any) {
+      setError(err.message || 'Failed to create account.')
+      setLoading(false)
     }
   }
 

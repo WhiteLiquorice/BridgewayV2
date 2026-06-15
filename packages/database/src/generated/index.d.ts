@@ -50,6 +50,20 @@ export interface Client_Key {
   __typename?: 'Client_Key';
 }
 
+export interface CreateAppointmentData {
+  appointment_insert: Appointment_Key;
+}
+
+export interface CreateAppointmentVariables {
+  orgId: UUIDString;
+  clientId: UUIDString;
+  serviceId?: UUIDString | null;
+  scheduledAt: TimestampString;
+  status: string;
+  amount: number;
+  notes?: string | null;
+}
+
 export interface CreateBookingData {
   booking_insert: Booking_Key;
 }
@@ -90,6 +104,18 @@ export interface CreateOrgVariables {
   email: string;
 }
 
+export interface CreateServiceData {
+  service_insert: Service_Key;
+}
+
+export interface CreateServiceVariables {
+  orgId: UUIDString;
+  name: string;
+  description?: string | null;
+  durationMinutes: number;
+  price: number;
+}
+
 export interface Document_Key {
   id: UUIDString;
   __typename?: 'Document_Key';
@@ -100,45 +126,57 @@ export interface FloorZone_Key {
   __typename?: 'FloorZone_Key';
 }
 
+export interface GetActiveServicesData {
+  services: ({
+    id: UUIDString;
+    name: string;
+    price?: number | null;
+  } & Service_Key)[];
+}
+
+export interface GetActiveServicesVariables {
+  orgId: UUIDString;
+}
+
 export interface GetAdminDashboardStatsData {
   profiles: ({
     id: UUIDString;
   } & Profile_Key)[];
-    clients: ({
-      id: UUIDString;
-    } & Client_Key)[];
-      appointments: ({
-        id: UUIDString;
-      } & Appointment_Key)[];
-        services: ({
-          id: UUIDString;
-        } & Service_Key)[];
-          activityLogs: ({
-            id: UUIDString;
-            action: string;
-            createdAt: TimestampString;
-            userId?: string | null;
-          } & ActivityLog_Key)[];
-            recentClients: ({
-              id: UUIDString;
-            } & Client_Key)[];
-              recentAppts: ({
-                id: UUIDString;
-                status: string;
-                amount?: number | null;
-                createdAt: TimestampString;
-                cancellationReason?: string | null;
-              } & Appointment_Key)[];
-                weekAppts: ({
-                  id: UUIDString;
-                  amount?: number | null;
-                  scheduledAt: TimestampString;
-                } & Appointment_Key)[];
-                  todayAppts: ({
-                    id: UUIDString;
-                    amount?: number | null;
-                    status: string;
-                  } & Appointment_Key)[];
+  clients: ({
+    id: UUIDString;
+  } & Client_Key)[];
+  appointments: ({
+    id: UUIDString;
+  } & Appointment_Key)[];
+  services: ({
+    id: UUIDString;
+  } & Service_Key)[];
+  activityLogs: ({
+    id: UUIDString;
+    action: string;
+    createdAt: TimestampString;
+    userId?: string | null;
+  } & ActivityLog_Key)[];
+  recentClients: ({
+    id: UUIDString;
+  } & Client_Key)[];
+  recentAppts: ({
+    id: UUIDString;
+    status: string;
+    amount?: number | null;
+    createdAt: TimestampString;
+    cancellationReason?: string | null;
+  } & Appointment_Key)[];
+  weekAppts: ({
+    id: UUIDString;
+    amount?: number | null;
+    scheduledAt: TimestampString;
+  } & Appointment_Key)[];
+  todayAppts: ({
+    id: UUIDString;
+    amount?: number | null;
+    status: string;
+  } & Appointment_Key)[];
 }
 
 export interface GetAdminDashboardStatsVariables {
@@ -198,18 +236,71 @@ export interface GetBookingPageDataData {
       durationMinutes?: number | null;
       price?: number | null;
     } & Service_Key)[];
-      orgSetting_on_org?: {
-        paymentRequired?: boolean | null;
-        externalCalendarSyncEnabled?: boolean | null;
-        stripeAccountId?: string | null;
-        bookingConfig?: unknown | null;
-        allowPhotoUpload?: boolean | null;
-      };
+    orgSetting_on_org?: {
+      paymentRequired?: boolean | null;
+      externalCalendarSyncEnabled?: boolean | null;
+      stripeAccountId?: string | null;
+      bookingConfig?: unknown | null;
+      allowPhotoUpload?: boolean | null;
+    };
   } & Org_Key)[];
 }
 
 export interface GetBookingPageDataVariables {
   slug: string;
+}
+
+export interface GetClientAppointmentsData {
+  appointments: ({
+    id: UUIDString;
+    scheduledAt: TimestampString;
+    durationMinutes?: number | null;
+    status: string;
+    amount?: number | null;
+    notes?: string | null;
+    service?: {
+      name: string;
+    };
+  } & Appointment_Key)[];
+}
+
+export interface GetClientAppointmentsVariables {
+  clientId: UUIDString;
+}
+
+export interface GetClientByEmailData {
+  clients: ({
+    id: UUIDString;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+  } & Client_Key)[];
+}
+
+export interface GetClientByEmailVariables {
+  orgId: UUIDString;
+  email: string;
+}
+
+export interface GetOrgAppointmentsData {
+  appointments: ({
+    id: UUIDString;
+    scheduledAt: TimestampString;
+    status: string;
+    amount?: number | null;
+    notes?: string | null;
+    client?: {
+      id: UUIDString;
+      name: string;
+    } & Client_Key;
+    service?: {
+      name: string;
+    };
+  } & Appointment_Key)[];
+}
+
+export interface GetOrgAppointmentsVariables {
+  orgId: UUIDString;
 }
 
 export interface GetOrgProfilesData {
@@ -381,6 +472,19 @@ export interface QueueEntry_Key {
   __typename?: 'QueueEntry_Key';
 }
 
+export interface SearchClientsData {
+  clients: ({
+    id: UUIDString;
+    name: string;
+    email?: string | null;
+  } & Client_Key)[];
+}
+
+export interface SearchClientsVariables {
+  orgId: UUIDString;
+  query: string;
+}
+
 export interface SeatAssignment_Key {
   id: UUIDString;
   __typename?: 'SeatAssignment_Key';
@@ -399,6 +503,15 @@ export interface Slot_Key {
 export interface StaffShift_Key {
   id: UUIDString;
   __typename?: 'StaffShift_Key';
+}
+
+export interface UpdateAppointmentStatusData {
+  appointment_update?: Appointment_Key | null;
+}
+
+export interface UpdateAppointmentStatusVariables {
+  id: UUIDString;
+  status: string;
 }
 
 export interface UpdateBookingData {
@@ -690,4 +803,100 @@ export const updateOrgGoogleCalendarRef: UpdateOrgGoogleCalendarRef;
 
 export function updateOrgGoogleCalendar(vars: UpdateOrgGoogleCalendarVariables): MutationPromise<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
 export function updateOrgGoogleCalendar(dc: DataConnect, vars: UpdateOrgGoogleCalendarVariables): MutationPromise<UpdateOrgGoogleCalendarData, UpdateOrgGoogleCalendarVariables>;
+
+interface GetClientByEmailRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetClientByEmailVariables): QueryRef<GetClientByEmailData, GetClientByEmailVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetClientByEmailVariables): QueryRef<GetClientByEmailData, GetClientByEmailVariables>;
+  operationName: string;
+}
+export const getClientByEmailRef: GetClientByEmailRef;
+
+export function getClientByEmail(vars: GetClientByEmailVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientByEmailData, GetClientByEmailVariables>;
+export function getClientByEmail(dc: DataConnect, vars: GetClientByEmailVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientByEmailData, GetClientByEmailVariables>;
+
+interface GetClientAppointmentsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetClientAppointmentsVariables): QueryRef<GetClientAppointmentsData, GetClientAppointmentsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetClientAppointmentsVariables): QueryRef<GetClientAppointmentsData, GetClientAppointmentsVariables>;
+  operationName: string;
+}
+export const getClientAppointmentsRef: GetClientAppointmentsRef;
+
+export function getClientAppointments(vars: GetClientAppointmentsVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientAppointmentsData, GetClientAppointmentsVariables>;
+export function getClientAppointments(dc: DataConnect, vars: GetClientAppointmentsVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientAppointmentsData, GetClientAppointmentsVariables>;
+
+interface UpdateAppointmentStatusRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateAppointmentStatusVariables): MutationRef<UpdateAppointmentStatusData, UpdateAppointmentStatusVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: UpdateAppointmentStatusVariables): MutationRef<UpdateAppointmentStatusData, UpdateAppointmentStatusVariables>;
+  operationName: string;
+}
+export const updateAppointmentStatusRef: UpdateAppointmentStatusRef;
+
+export function updateAppointmentStatus(vars: UpdateAppointmentStatusVariables): MutationPromise<UpdateAppointmentStatusData, UpdateAppointmentStatusVariables>;
+export function updateAppointmentStatus(dc: DataConnect, vars: UpdateAppointmentStatusVariables): MutationPromise<UpdateAppointmentStatusData, UpdateAppointmentStatusVariables>;
+
+interface GetOrgAppointmentsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetOrgAppointmentsVariables): QueryRef<GetOrgAppointmentsData, GetOrgAppointmentsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetOrgAppointmentsVariables): QueryRef<GetOrgAppointmentsData, GetOrgAppointmentsVariables>;
+  operationName: string;
+}
+export const getOrgAppointmentsRef: GetOrgAppointmentsRef;
+
+export function getOrgAppointments(vars: GetOrgAppointmentsVariables, options?: ExecuteQueryOptions): QueryPromise<GetOrgAppointmentsData, GetOrgAppointmentsVariables>;
+export function getOrgAppointments(dc: DataConnect, vars: GetOrgAppointmentsVariables, options?: ExecuteQueryOptions): QueryPromise<GetOrgAppointmentsData, GetOrgAppointmentsVariables>;
+
+interface CreateAppointmentRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateAppointmentVariables): MutationRef<CreateAppointmentData, CreateAppointmentVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateAppointmentVariables): MutationRef<CreateAppointmentData, CreateAppointmentVariables>;
+  operationName: string;
+}
+export const createAppointmentRef: CreateAppointmentRef;
+
+export function createAppointment(vars: CreateAppointmentVariables): MutationPromise<CreateAppointmentData, CreateAppointmentVariables>;
+export function createAppointment(dc: DataConnect, vars: CreateAppointmentVariables): MutationPromise<CreateAppointmentData, CreateAppointmentVariables>;
+
+interface GetActiveServicesRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetActiveServicesVariables): QueryRef<GetActiveServicesData, GetActiveServicesVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetActiveServicesVariables): QueryRef<GetActiveServicesData, GetActiveServicesVariables>;
+  operationName: string;
+}
+export const getActiveServicesRef: GetActiveServicesRef;
+
+export function getActiveServices(vars: GetActiveServicesVariables, options?: ExecuteQueryOptions): QueryPromise<GetActiveServicesData, GetActiveServicesVariables>;
+export function getActiveServices(dc: DataConnect, vars: GetActiveServicesVariables, options?: ExecuteQueryOptions): QueryPromise<GetActiveServicesData, GetActiveServicesVariables>;
+
+interface SearchClientsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: SearchClientsVariables): QueryRef<SearchClientsData, SearchClientsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: SearchClientsVariables): QueryRef<SearchClientsData, SearchClientsVariables>;
+  operationName: string;
+}
+export const searchClientsRef: SearchClientsRef;
+
+export function searchClients(vars: SearchClientsVariables, options?: ExecuteQueryOptions): QueryPromise<SearchClientsData, SearchClientsVariables>;
+export function searchClients(dc: DataConnect, vars: SearchClientsVariables, options?: ExecuteQueryOptions): QueryPromise<SearchClientsData, SearchClientsVariables>;
+
+interface CreateServiceRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateServiceVariables): MutationRef<CreateServiceData, CreateServiceVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateServiceVariables): MutationRef<CreateServiceData, CreateServiceVariables>;
+  operationName: string;
+}
+export const createServiceRef: CreateServiceRef;
+
+export function createService(vars: CreateServiceVariables): MutationPromise<CreateServiceData, CreateServiceVariables>;
+export function createService(dc: DataConnect, vars: CreateServiceVariables): MutationPromise<CreateServiceData, CreateServiceVariables>;
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgAppointments, updateAppointmentStatus, createAppointment, getActiveServices, searchClients } from '@bridgeway/database'
 
 // Constants for appointment status (ported from dashboard)
 const STATUS_ORDER = ['pending', 'confirmed', 'arrived', 'with_provider', 'completed']
@@ -114,25 +115,41 @@ export default function OrgFrontDesk() {
   async function fetchAppointments() {
     setLoading(true)
     try {
-      let query = supabase
-        .from('appointments')
-        .select('id, scheduled_at, status, amount, client_id, clients(id, name), services(name)', { count: 'exact' })
-        .eq('org_id', orgId)
-        .order('scheduled_at', { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      const { data } = await getOrgAppointments(dataconnect, { orgId })
+      let appts = data.appointments || []
 
-      if (statusFilter) query = query.eq('status', statusFilter)
-      if (dateFrom)     query = query.gte('scheduled_at', new Date(dateFrom).toISOString())
+      // Apply in-memory filters
+      if (statusFilter) {
+        appts = appts.filter(a => a.status === statusFilter)
+      }
+      if (dateFrom) {
+        const fromTime = new Date(dateFrom).getTime()
+        appts = appts.filter(a => new Date(a.scheduledAt).getTime() >= fromTime)
+      }
       if (dateTo) {
-        const end = new Date(dateTo)
-        end.setHours(23, 59, 59, 999)
-        query = query.lte('scheduled_at', end.toISOString())
+        const toDate = new Date(dateTo)
+        toDate.setHours(23, 59, 59, 999)
+        const toTime = toDate.getTime()
+        appts = appts.filter(a => new Date(a.scheduledAt).getTime() <= toTime)
       }
 
-      const { data, count, error } = await query
-      if (error) throw error
-      setAppointments(data || [])
-      setTotal(count || 0)
+      setTotal(appts.length)
+
+      // Paginate
+      const start = page * PAGE_SIZE
+      const paginated = appts.slice(start, start + PAGE_SIZE)
+
+      // Map fields to match Supabase structure:
+      // clients(id, name), services(name), scheduled_at
+      const mapped = paginated.map((appt: any) => ({
+        ...appt,
+        scheduled_at: appt.scheduledAt,
+        client_id: appt.client?.id,
+        clients: appt.client ? { id: appt.client.id, name: appt.client.name } : null,
+        services: appt.service ? { name: appt.service.name } : null
+      }))
+
+      setAppointments(mapped)
     } catch (err) {
       console.error('Error fetching appointments:', err)
     } finally {
@@ -145,8 +162,7 @@ export default function OrgFrontDesk() {
     if (!next) return
     setUpdating(id)
     try {
-      const { error } = await supabase.from('appointments').update({ status: next }).eq('id', id)
-      if (error) throw error
+      await updateAppointmentStatus(dataconnect, { id, status: next })
       fetchAppointments()
     } catch (err) {
       console.error('Error updating status:', err)
@@ -159,8 +175,7 @@ export default function OrgFrontDesk() {
     if (!window.confirm('Cancel this appointment?')) return
     setUpdating(id)
     try {
-      const { error } = await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', id)
-      if (error) throw error
+      await updateAppointmentStatus(dataconnect, { id, status: 'cancelled' })
       fetchAppointments()
     } catch (err) {
       console.error('Error cancelling appointment:', err)
@@ -434,9 +449,8 @@ function AddAppointmentModal({ orgId, onClose, onCreated }: { orgId: string; onC
 
   useEffect(() => {
     // Fetch active services
-    supabase.from('services').select('id, name, price')
-      .eq('org_id', orgId).eq('active', true).order('name')
-      .then(({ data }) => setServices(data || []))
+    getActiveServices(dataconnect, { orgId })
+      .then(({ data }) => setServices(data.services || []))
   }, [orgId])
 
   // Debounced search for clients
@@ -444,13 +458,13 @@ function AddAppointmentModal({ orgId, onClose, onCreated }: { orgId: string; onC
     clearTimeout(searchTimer.current)
     if (!clientSearch.trim()) { setClients([]); return }
     searchTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('clients').select('id, name, email')
-        .eq('org_id', orgId)
-        .ilike('name', `%${clientSearch}%`)
-        .limit(8)
-      setClients(data || [])
-      setShowDropdown(true)
+      try {
+        const { data } = await searchClients(dataconnect, { orgId, query: clientSearch })
+        setClients(data.clients || [])
+        setShowDropdown(true)
+      } catch (err) {
+        console.error('Error searching clients:', err)
+      }
     }, 300)
     return () => clearTimeout(searchTimer.current)
   }, [clientSearch, orgId])
@@ -470,16 +484,15 @@ function AddAppointmentModal({ orgId, onClose, onCreated }: { orgId: string; onC
     setError('')
     try {
       const scheduledAt = new Date(`${date}T${time}`).toISOString()
-      const { error: err } = await supabase.from('appointments').insert({
-        org_id: orgId,
-        client_id: selectedClient.id,
-        service_id: serviceId || null,
-        scheduled_at: scheduledAt,
+      await createAppointment(dataconnect, {
+        orgId,
+        clientId: selectedClient.id,
+        serviceId: serviceId || null,
+        scheduledAt,
         status: 'confirmed',
         amount: amount ? parseFloat(amount) : 0,
         notes: notes || null,
       })
-      if (err) throw err
       onCreated()
     } catch (e: any) {
       setError(e.message || 'Failed to create appointment')
