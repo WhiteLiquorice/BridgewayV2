@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { getUpcomingOrgAppointments, updateAppointmentStatus } from '@bridgeway/database'
+import { dataconnect } from '../lib/firebase'
 import { useOrg, useResetInactivity } from '../App'
 
 function NumKey({ label, sub, onClick, accent }) {
@@ -60,26 +61,29 @@ export default function CheckIn() {
       const tomorrow = new Date(today)
       tomorrow.setDate(tomorrow.getDate() + 1)
 
-      const { data, error: err } = await supabase
-        .from('appointments')
-        .select('id, scheduled_at, status, service:services!service_id(name), client:clients!client_id(id, name, phone)')
-        .eq('org_id', org.id)
-        .eq('status', 'confirmed')
-        .gte('scheduled_at', today.toISOString())
-        .lt('scheduled_at', tomorrow.toISOString())
-        .order('scheduled_at')
-
-      if (err) throw err
-
-      // Filter by last 4 digits of phone (strip non-digits first)
-      const found = (data || []).filter(a => {
-        const digits = (a.client?.phone || '').replace(/\D/g, '')
-        return digits.slice(-4) === last4
+      const { data } = await getUpcomingOrgAppointments(dataconnect, { orgId: org.id })
+      
+      const appts = (data?.appointments || []).filter(a => {
+        const scheduledTime = new Date(a.scheduledAt).getTime()
+        return scheduledTime >= today.getTime() && scheduledTime < tomorrow.getTime()
       })
 
-      setMatches(found)
+      // Filter by last 4 digits of phone (strip non-digits first)
+      const found = appts.filter(a => {
+        const phoneDigits = (a.client?.phone || '').replace(/\D/g, '')
+        return phoneDigits.slice(-4) === last4
+      }).map(a => ({
+        id: a.id,
+        scheduled_at: a.scheduledAt,
+        status: a.status,
+        service: { name: a.service?.name },
+        client: { id: a.client?.id, name: a.client?.name, phone: a.client?.phone }
+      }))
+
+      setMatches(found as any)
       if (found.length === 0) setError('No appointments found for those digits. Try again or ask the front desk.')
-    } catch {
+    } catch (err: any) {
+      console.error(err)
       setError('Something went wrong. Please try again.')
     } finally {
       setSearching(false)
@@ -88,23 +92,20 @@ export default function CheckIn() {
 
   async function confirmCheckIn(appt) {
     resetInactivity()
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status: 'arrived' })
-      .eq('id', appt.id)
-
-    if (error) {
+    try {
+      await updateAppointmentStatus(dataconnect, { id: appt.id, status: 'arrived' })
+      navigate('/done', {
+        state: {
+          type: 'checkin',
+          name: appt.client?.name,
+          service: appt.service?.name,
+          time: new Date(appt.scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+        },
+      })
+    } catch (err: any) {
+      console.error(err)
       alert('Check-in failed. Please see the front desk.')
-      return
     }
-    navigate('/done', {
-      state: {
-        type: 'checkin',
-        name: appt.client?.name,
-        service: appt.service?.name,
-        time: new Date(appt.scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-      },
-    })
   }
 
   function reset() {

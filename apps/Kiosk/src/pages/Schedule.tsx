@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { getBookingPageData, getAppointmentsForDay, getClientByPhone, createClient, createAppointment } from '@bridgeway/database'
+import { dataconnect } from '../lib/firebase'
 import { useOrg, useResetInactivity } from '../App'
 import { generateSlots, formatTime, formatDate, getUpcomingDates, toLocalDateString } from '../lib/slots'
 
@@ -26,14 +27,18 @@ export default function Schedule() {
   const [formError, setFormError] = useState('')
 
   useEffect(() => {
-    if (!org) return
-    supabase
-      .from('services')
-      .select('id, name, duration_minutes, price')
-      .eq('org_id', org.id)
-      .eq('is_active', true)
-      .order('name')
-      .then(({ data }) => setServices(data || []))
+    if (!org?.slug) return
+    getBookingPageData(dataconnect, { slug: org.slug })
+      .then(({ data }) => {
+        const svcs = (data?.orgs?.[0]?.services_on_org || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          duration_minutes: s.durationMinutes,
+          price: s.price
+        }))
+        setServices(svcs as any)
+      })
+      .catch(err => console.error('Error fetching services:', err))
   }, [org])
 
   async function loadSlots(selectedDate, selectedService) {
@@ -43,18 +48,21 @@ export default function Schedule() {
     const startOfDay = new Date(y, m - 1, d, 0, 0, 0).toISOString()
     const endOfDay   = new Date(y, m - 1, d, 23, 59, 59).toISOString()
 
-    const { data } = await supabase
-      .from('appointments')
-      .select('scheduled_at, service:services!service_id(duration_minutes)')
-      .eq('org_id', org.id)
-      .in('status', ['confirmed', 'arrived', 'with_provider'])
-      .gte('scheduled_at', startOfDay)
-      .lte('scheduled_at', endOfDay)
+    const { data } = await getAppointmentsForDay(dataconnect, {
+      orgId: org.id,
+      startOfDay,
+      endOfDay
+    })
+
+    const appts = (data?.appointments || []).map((a: any) => ({
+      scheduled_at: a.scheduledAt,
+      service: { duration_minutes: a.service?.durationMinutes }
+    }))
 
     const available = generateSlots(
       '09:00', '17:00',
       selectedService.duration_minutes || 60,
-      data || [],
+      appts || [],
       new Date(y, m - 1, d)
     )
     setSlots(available)
@@ -92,36 +100,36 @@ export default function Schedule() {
       // Upsert client record
       const cleanPhone = phone.trim()
       let clientId = null
-      const { data: existing } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('org_id', org.id)
-        .eq('phone', cleanPhone)
-        .maybeSingle()
+      
+      const { data: existingData } = await getClientByPhone(dataconnect, { orgId: org.id, phone: cleanPhone })
+      const existing = existingData?.clients?.[0]
 
       if (existing) {
         clientId = existing.id
       } else {
-        const { data: newClient, error: clientErr } = await supabase
-          .from('clients')
-          .insert({ org_id: org.id, name: name.trim(), phone: cleanPhone })
-          .select('id')
-          .single()
-        if (clientErr) throw clientErr
-        clientId = newClient.id
+        const { data: newClientData } = await createClient(dataconnect, {
+          orgId: org.id,
+          name: name.trim(),
+          phone: cleanPhone
+        })
+        clientId = newClientData?.client_insert?.id
+      }
+
+      if (!clientId) {
+        throw new Error('Failed to create or retrieve client record.')
       }
 
       // Create confirmed appointment
-      const { error: apptErr } = await supabase
-        .from('appointments')
-        .insert({
-          org_id:       org.id,
-          client_id:    clientId,
-          service_id:   service.id,
-          scheduled_at: slot.toISOString(),
-          status:       'confirmed',
-        })
-      if (apptErr) throw apptErr
+      const amount = Number(service.price) || 0
+      await createAppointment(dataconnect, {
+        orgId:       org.id,
+        clientId:    clientId,
+        serviceId:   service.id,
+        scheduledAt: slot.toISOString(),
+        status:       'confirmed',
+        amount:       amount,
+        notes:        ''
+      })
 
       navigate('/done', {
         state: {
@@ -132,7 +140,7 @@ export default function Schedule() {
           time:    formatTime(slot),
         },
       })
-    } catch (err) {
+    } catch (err: any) {
       setFormError(err.message || 'Something went wrong. Please try again.')
       setSubmitting(false)
     }

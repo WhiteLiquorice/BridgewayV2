@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { createClient } from '@bridgeway/database'
+import { dataconnect } from '../lib/firebase'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
 import Modal from './Modal'
@@ -35,28 +36,29 @@ export default function AddClientModal({ isOpen, onClose, onCreated }) {
     setSaving(true)
     setError('')
     try {
-      const { data, error: err } = await supabase.from('clients').insert({
-        org_id: profile.org_id,
+      const { data: newClientData } = await createClient(dataconnect, {
+        orgId: profile.org_id,
         name: name.trim(),
         email: email.trim() || null,
         phone: phone.trim() || null,
-        date_of_birth: dob || null,
+        dateOfBirth: dob || null,
         address: address.trim() || null,
         notes: notes.trim() || null,
-      }).select('*').single()
-      if (err) throw err
+      })
+      const clientId = newClientData?.client_insert?.id
+
       logActivity({
         org_id: profile.org_id,
         user_id: profile.user_id,
         action: 'client.created',
         entity_type: 'client',
-        entity_id: data?.id,
+        entity_id: clientId,
         metadata: { client_name: name.trim() },
       })
       showToast('Client created', 'success')
-      onCreated?.(data)
+      onCreated?.({ id: clientId, name: name.trim() })
       onClose()
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message || 'Failed to create client')
     } finally {
       setSaving(false)

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getInAppNotifications, markNotificationRead } from '@bridgeway/database'
 
 export default function NotificationBell() {
-  const { user } = useAuth()
+  const { profile } = useAuth()
+  const orgId = profile?.org_id
   const [notifications, setNotifications] = useState([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
@@ -13,39 +15,31 @@ export default function NotificationBell() {
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
-    if (!user?.id) return
-    const { data } = await supabase
-      .from('in_app_notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(20)
-    setNotifications(data || [])
-    setUnread((data || []).filter(n => !n.read).length)
-  }, [user?.id])
+    if (!orgId) return
+    try {
+      const { data } = await getInAppNotifications(dataconnect, { orgId })
+      const mapped = (data?.inAppNotifications || []).map((n: any) => ({
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        link: n.link,
+        read: n.isRead,
+        created_at: n.createdAt
+      }))
+      setNotifications(mapped as any)
+      setUnread(mapped.filter(n => !n.read).length)
+    } catch (err) {
+      console.error(err)
+    }
+  }, [orgId])
 
   useEffect(() => {
     fetchNotifications()
+    // Poll for notifications every 60 seconds
+    const interval = setInterval(fetchNotifications, 60000)
+    return () => clearInterval(interval)
   }, [fetchNotifications])
-
-  // Realtime subscription
-  useEffect(() => {
-    if (!user?.id) return
-    const channel = supabase
-      .channel('notifications')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'in_app_notifications',
-        filter: `user_id=eq.${user.id}`,
-      }, (payload) => {
-        setNotifications(prev => [payload.new, ...prev].slice(0, 20))
-        setUnread(prev => prev + 1)
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [user?.id])
 
   // Close panel on click outside
   useEffect(() => {
@@ -64,14 +58,16 @@ export default function NotificationBell() {
 
   // Mark all as read
   async function markAllRead() {
-    if (!user?.id || unread === 0) return
-    await supabase
-      .from('in_app_notifications')
-      .update({ read: true })
-      .eq('user_id', user.id)
-      .eq('read', false)
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-    setUnread(0)
+    if (!orgId || unread === 0) return
+    try {
+      const unreadList = notifications.filter((n: any) => !n.read)
+      await Promise.all(unreadList.map((n: any) => markNotificationRead(dataconnect, { id: n.id })))
+      
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setUnread(0)
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   function timeAgo(ts) {

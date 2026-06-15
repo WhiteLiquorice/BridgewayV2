@@ -58,7 +58,9 @@ export interface CreateAppointmentVariables {
   orgId: UUIDString;
   clientId: UUIDString;
   serviceId?: UUIDString | null;
+  staffId?: UUIDString | null;
   scheduledAt: TimestampString;
+  durationMinutes?: number | null;
   status: string;
   amount: number;
   notes?: string | null;
@@ -79,6 +81,33 @@ export interface CreateBookingVariables {
   notes?: string | null;
   status: string;
   paymentStatus?: string | null;
+}
+
+export interface CreateClientData {
+  client_insert: Client_Key;
+}
+
+export interface CreateClientPackageData {
+  clientPackage_insert: ClientPackage_Key;
+}
+
+export interface CreateClientPackageVariables {
+  orgId: UUIDString;
+  clientId: UUIDString;
+  name: string;
+  totalSessions: number;
+  price: number;
+  expiresAt?: TimestampString | null;
+}
+
+export interface CreateClientVariables {
+  orgId: UUIDString;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  dateOfBirth?: DateString | null;
+  address?: string | null;
+  notes?: string | null;
 }
 
 export interface CreateOrgData {
@@ -104,6 +133,18 @@ export interface CreateOrgVariables {
   email: string;
 }
 
+export interface CreateQueueEntryData {
+  queueEntry_insert: QueueEntry_Key;
+}
+
+export interface CreateQueueEntryVariables {
+  orgId: UUIDString;
+  clientName: string;
+  serviceId?: UUIDString | null;
+  status: string;
+  position: number;
+}
+
 export interface CreateServiceData {
   service_insert: Service_Key;
 }
@@ -116,6 +157,14 @@ export interface CreateServiceVariables {
   price: number;
 }
 
+export interface DeleteQueueEntryData {
+  queueEntry_delete?: QueueEntry_Key | null;
+}
+
+export interface DeleteQueueEntryVariables {
+  id: UUIDString;
+}
+
 export interface Document_Key {
   id: UUIDString;
   __typename?: 'Document_Key';
@@ -126,11 +175,26 @@ export interface FloorZone_Key {
   __typename?: 'FloorZone_Key';
 }
 
+export interface GetActivePackageTemplatesData {
+  packageTemplates: ({
+    id: UUIDString;
+    name: string;
+    sessionCount?: number | null;
+    price: number;
+    expiryDays?: number | null;
+  } & PackageTemplate_Key)[];
+}
+
+export interface GetActivePackageTemplatesVariables {
+  orgId: UUIDString;
+}
+
 export interface GetActiveServicesData {
   services: ({
     id: UUIDString;
     name: string;
     price?: number | null;
+    durationMinutes?: number | null;
   } & Service_Key)[];
 }
 
@@ -282,6 +346,84 @@ export interface GetClientByEmailVariables {
   email: string;
 }
 
+export interface GetClientByPhoneData {
+  clients: ({
+    id: UUIDString;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+  } & Client_Key)[];
+}
+
+export interface GetClientByPhoneVariables {
+  orgId: UUIDString;
+  phone: string;
+}
+
+export interface GetClientDetailData {
+  client?: {
+    id: UUIDString;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    dateOfBirth?: DateString | null;
+    address?: string | null;
+    notes?: string | null;
+    createdAt: TimestampString;
+    appointments_on_client: ({
+      id: UUIDString;
+      scheduledAt: TimestampString;
+      durationMinutes?: number | null;
+      status: string;
+      amount?: number | null;
+      notes?: string | null;
+      service?: {
+        name: string;
+      };
+    } & Appointment_Key)[];
+    clientPackages_on_client: ({
+      id: UUIDString;
+      name: string;
+      totalSessions: number;
+      usedSessions: number;
+      price?: number | null;
+      purchasedAt: TimestampString;
+      expiresAt?: TimestampString | null;
+      status: string;
+    } & ClientPackage_Key)[];
+    classRegistrations_on_client: ({
+      id: UUIDString;
+      classDate: DateString;
+      status: string;
+      classEntity: {
+        name: string;
+        startTime: string;
+        durationMinutes?: number | null;
+      };
+    } & ClassRegistration_Key)[];
+  } & Client_Key;
+}
+
+export interface GetClientDetailVariables {
+  id: UUIDString;
+}
+
+export interface GetInAppNotificationsData {
+  inAppNotifications: ({
+    id: UUIDString;
+    type: string;
+    title: string;
+    message?: string | null;
+    link?: string | null;
+    isRead?: boolean | null;
+    createdAt: TimestampString;
+  } & InAppNotification_Key)[];
+}
+
+export interface GetInAppNotificationsVariables {
+  orgId: UUIDString;
+}
+
 export interface GetOrgAppointmentsData {
   appointments: ({
     id: UUIDString;
@@ -289,6 +431,7 @@ export interface GetOrgAppointmentsData {
     status: string;
     amount?: number | null;
     notes?: string | null;
+    durationMinutes?: number | null;
     client?: {
       id: UUIDString;
       name: string;
@@ -300,6 +443,26 @@ export interface GetOrgAppointmentsData {
 }
 
 export interface GetOrgAppointmentsVariables {
+  orgId: UUIDString;
+}
+
+export interface GetOrgClientsData {
+  clients: ({
+    id: UUIDString;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    createdAt: TimestampString;
+    appointments_on_client: ({
+      id: UUIDString;
+      scheduledAt: TimestampString;
+      amount?: number | null;
+      status: string;
+    } & Appointment_Key)[];
+  } & Client_Key)[];
+}
+
+export interface GetOrgClientsVariables {
   orgId: UUIDString;
 }
 
@@ -317,6 +480,35 @@ export interface GetOrgProfilesData {
 }
 
 export interface GetOrgProfilesVariables {
+  orgId: UUIDString;
+}
+
+export interface GetOrgQueueData {
+  queueEntries: ({
+    id: UUIDString;
+    clientName: string;
+    status: string;
+    position: number;
+    notes?: string | null;
+    joinedAt: TimestampString;
+    calledAt?: TimestampString | null;
+    completedAt?: TimestampString | null;
+    client?: {
+      id: UUIDString;
+      name: string;
+    } & Client_Key;
+    service?: {
+      id: UUIDString;
+      name: string;
+    } & Service_Key;
+    staff?: {
+      id: UUIDString;
+      fullName?: string | null;
+    } & Profile_Key;
+  } & QueueEntry_Key)[];
+}
+
+export interface GetOrgQueueVariables {
   orgId: UUIDString;
 }
 
@@ -338,6 +530,25 @@ export interface GetOrgSettingsData {
 
 export interface GetOrgSettingsVariables {
   orgId: UUIDString;
+}
+
+export interface GetSlotsForDayData {
+  slots: ({
+    id: UUIDString;
+    startTime: TimestampString;
+    endTime: TimestampString;
+    status: string;
+    staff?: {
+      id: UUIDString;
+      fullName?: string | null;
+    } & Profile_Key;
+  } & Slot_Key)[];
+}
+
+export interface GetSlotsForDayVariables {
+  orgId: UUIDString;
+  start: TimestampString;
+  end: TimestampString;
 }
 
 export interface GetUpcomingBookingsData {
@@ -363,6 +574,30 @@ export interface GetUpcomingBookingsVariables {
   windowHi: DateString;
   check24h?: boolean | null;
   check2h?: boolean | null;
+}
+
+export interface GetUpcomingOrgAppointmentsData {
+  appointments: ({
+    id: UUIDString;
+    scheduledAt: TimestampString;
+    durationMinutes?: number | null;
+    status: string;
+    amount?: number | null;
+    client?: {
+      id: UUIDString;
+      name: string;
+      email?: string | null;
+      phone?: string | null;
+    } & Client_Key;
+    service?: {
+      id: UUIDString;
+      name: string;
+    } & Service_Key;
+  } & Appointment_Key)[];
+}
+
+export interface GetUpcomingOrgAppointmentsVariables {
+  orgId: UUIDString;
 }
 
 export interface GetUserProfileData {
@@ -398,6 +633,27 @@ export interface IntakeFormSubmission_Key {
 export interface IntakeFormTemplate_Key {
   id: UUIDString;
   __typename?: 'IntakeFormTemplate_Key';
+}
+
+export interface LogActivityData {
+  activityLog_insert: ActivityLog_Key;
+}
+
+export interface LogActivityVariables {
+  orgId: UUIDString;
+  userId?: string | null;
+  action: string;
+  entityType?: string | null;
+  entityId?: UUIDString | null;
+  metadata?: unknown | null;
+}
+
+export interface MarkNotificationReadData {
+  inAppNotification_update?: InAppNotification_Key | null;
+}
+
+export interface MarkNotificationReadVariables {
+  id: UUIDString;
 }
 
 export interface MarketingTrigger_Key {
@@ -528,6 +784,20 @@ export interface UpdateBookingVariables {
   googleEventLink?: string | null;
 }
 
+export interface UpdateClientData {
+  client_update?: Client_Key | null;
+}
+
+export interface UpdateClientVariables {
+  id: UUIDString;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  dateOfBirth?: DateString | null;
+  address?: string | null;
+  notes?: string | null;
+}
+
 export interface UpdateOrgBrandingData {
   org_update?: Org_Key | null;
 }
@@ -581,6 +851,18 @@ export interface UpdateProfileStatusData {
 export interface UpdateProfileStatusVariables {
   id: UUIDString;
   isActive: boolean;
+}
+
+export interface UpdateQueueStatusData {
+  queueEntry_update?: QueueEntry_Key | null;
+}
+
+export interface UpdateQueueStatusVariables {
+  id: UUIDString;
+  status?: string | null;
+  position?: number | null;
+  calledAt?: TimestampString | null;
+  completedAt?: TimestampString | null;
 }
 
 export interface WidgetConfig_Key {
@@ -816,6 +1098,18 @@ export const getClientByEmailRef: GetClientByEmailRef;
 export function getClientByEmail(vars: GetClientByEmailVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientByEmailData, GetClientByEmailVariables>;
 export function getClientByEmail(dc: DataConnect, vars: GetClientByEmailVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientByEmailData, GetClientByEmailVariables>;
 
+interface GetClientByPhoneRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetClientByPhoneVariables): QueryRef<GetClientByPhoneData, GetClientByPhoneVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetClientByPhoneVariables): QueryRef<GetClientByPhoneData, GetClientByPhoneVariables>;
+  operationName: string;
+}
+export const getClientByPhoneRef: GetClientByPhoneRef;
+
+export function getClientByPhone(vars: GetClientByPhoneVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientByPhoneData, GetClientByPhoneVariables>;
+export function getClientByPhone(dc: DataConnect, vars: GetClientByPhoneVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientByPhoneData, GetClientByPhoneVariables>;
+
 interface GetClientAppointmentsRef {
   /* Allow users to create refs without passing in DataConnect */
   (vars: GetClientAppointmentsVariables): QueryRef<GetClientAppointmentsData, GetClientAppointmentsVariables>;
@@ -899,4 +1193,184 @@ export const createServiceRef: CreateServiceRef;
 
 export function createService(vars: CreateServiceVariables): MutationPromise<CreateServiceData, CreateServiceVariables>;
 export function createService(dc: DataConnect, vars: CreateServiceVariables): MutationPromise<CreateServiceData, CreateServiceVariables>;
+
+interface GetOrgClientsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetOrgClientsVariables): QueryRef<GetOrgClientsData, GetOrgClientsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetOrgClientsVariables): QueryRef<GetOrgClientsData, GetOrgClientsVariables>;
+  operationName: string;
+}
+export const getOrgClientsRef: GetOrgClientsRef;
+
+export function getOrgClients(vars: GetOrgClientsVariables, options?: ExecuteQueryOptions): QueryPromise<GetOrgClientsData, GetOrgClientsVariables>;
+export function getOrgClients(dc: DataConnect, vars: GetOrgClientsVariables, options?: ExecuteQueryOptions): QueryPromise<GetOrgClientsData, GetOrgClientsVariables>;
+
+interface GetClientDetailRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetClientDetailVariables): QueryRef<GetClientDetailData, GetClientDetailVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetClientDetailVariables): QueryRef<GetClientDetailData, GetClientDetailVariables>;
+  operationName: string;
+}
+export const getClientDetailRef: GetClientDetailRef;
+
+export function getClientDetail(vars: GetClientDetailVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientDetailData, GetClientDetailVariables>;
+export function getClientDetail(dc: DataConnect, vars: GetClientDetailVariables, options?: ExecuteQueryOptions): QueryPromise<GetClientDetailData, GetClientDetailVariables>;
+
+interface CreateClientRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateClientVariables): MutationRef<CreateClientData, CreateClientVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateClientVariables): MutationRef<CreateClientData, CreateClientVariables>;
+  operationName: string;
+}
+export const createClientRef: CreateClientRef;
+
+export function createClient(vars: CreateClientVariables): MutationPromise<CreateClientData, CreateClientVariables>;
+export function createClient(dc: DataConnect, vars: CreateClientVariables): MutationPromise<CreateClientData, CreateClientVariables>;
+
+interface UpdateClientRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateClientVariables): MutationRef<UpdateClientData, UpdateClientVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: UpdateClientVariables): MutationRef<UpdateClientData, UpdateClientVariables>;
+  operationName: string;
+}
+export const updateClientRef: UpdateClientRef;
+
+export function updateClient(vars: UpdateClientVariables): MutationPromise<UpdateClientData, UpdateClientVariables>;
+export function updateClient(dc: DataConnect, vars: UpdateClientVariables): MutationPromise<UpdateClientData, UpdateClientVariables>;
+
+interface GetOrgQueueRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetOrgQueueVariables): QueryRef<GetOrgQueueData, GetOrgQueueVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetOrgQueueVariables): QueryRef<GetOrgQueueData, GetOrgQueueVariables>;
+  operationName: string;
+}
+export const getOrgQueueRef: GetOrgQueueRef;
+
+export function getOrgQueue(vars: GetOrgQueueVariables, options?: ExecuteQueryOptions): QueryPromise<GetOrgQueueData, GetOrgQueueVariables>;
+export function getOrgQueue(dc: DataConnect, vars: GetOrgQueueVariables, options?: ExecuteQueryOptions): QueryPromise<GetOrgQueueData, GetOrgQueueVariables>;
+
+interface CreateQueueEntryRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateQueueEntryVariables): MutationRef<CreateQueueEntryData, CreateQueueEntryVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateQueueEntryVariables): MutationRef<CreateQueueEntryData, CreateQueueEntryVariables>;
+  operationName: string;
+}
+export const createQueueEntryRef: CreateQueueEntryRef;
+
+export function createQueueEntry(vars: CreateQueueEntryVariables): MutationPromise<CreateQueueEntryData, CreateQueueEntryVariables>;
+export function createQueueEntry(dc: DataConnect, vars: CreateQueueEntryVariables): MutationPromise<CreateQueueEntryData, CreateQueueEntryVariables>;
+
+interface UpdateQueueStatusRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: UpdateQueueStatusVariables): MutationRef<UpdateQueueStatusData, UpdateQueueStatusVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: UpdateQueueStatusVariables): MutationRef<UpdateQueueStatusData, UpdateQueueStatusVariables>;
+  operationName: string;
+}
+export const updateQueueStatusRef: UpdateQueueStatusRef;
+
+export function updateQueueStatus(vars: UpdateQueueStatusVariables): MutationPromise<UpdateQueueStatusData, UpdateQueueStatusVariables>;
+export function updateQueueStatus(dc: DataConnect, vars: UpdateQueueStatusVariables): MutationPromise<UpdateQueueStatusData, UpdateQueueStatusVariables>;
+
+interface DeleteQueueEntryRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: DeleteQueueEntryVariables): MutationRef<DeleteQueueEntryData, DeleteQueueEntryVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: DeleteQueueEntryVariables): MutationRef<DeleteQueueEntryData, DeleteQueueEntryVariables>;
+  operationName: string;
+}
+export const deleteQueueEntryRef: DeleteQueueEntryRef;
+
+export function deleteQueueEntry(vars: DeleteQueueEntryVariables): MutationPromise<DeleteQueueEntryData, DeleteQueueEntryVariables>;
+export function deleteQueueEntry(dc: DataConnect, vars: DeleteQueueEntryVariables): MutationPromise<DeleteQueueEntryData, DeleteQueueEntryVariables>;
+
+interface GetUpcomingOrgAppointmentsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetUpcomingOrgAppointmentsVariables): QueryRef<GetUpcomingOrgAppointmentsData, GetUpcomingOrgAppointmentsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetUpcomingOrgAppointmentsVariables): QueryRef<GetUpcomingOrgAppointmentsData, GetUpcomingOrgAppointmentsVariables>;
+  operationName: string;
+}
+export const getUpcomingOrgAppointmentsRef: GetUpcomingOrgAppointmentsRef;
+
+export function getUpcomingOrgAppointments(vars: GetUpcomingOrgAppointmentsVariables, options?: ExecuteQueryOptions): QueryPromise<GetUpcomingOrgAppointmentsData, GetUpcomingOrgAppointmentsVariables>;
+export function getUpcomingOrgAppointments(dc: DataConnect, vars: GetUpcomingOrgAppointmentsVariables, options?: ExecuteQueryOptions): QueryPromise<GetUpcomingOrgAppointmentsData, GetUpcomingOrgAppointmentsVariables>;
+
+interface GetSlotsForDayRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetSlotsForDayVariables): QueryRef<GetSlotsForDayData, GetSlotsForDayVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetSlotsForDayVariables): QueryRef<GetSlotsForDayData, GetSlotsForDayVariables>;
+  operationName: string;
+}
+export const getSlotsForDayRef: GetSlotsForDayRef;
+
+export function getSlotsForDay(vars: GetSlotsForDayVariables, options?: ExecuteQueryOptions): QueryPromise<GetSlotsForDayData, GetSlotsForDayVariables>;
+export function getSlotsForDay(dc: DataConnect, vars: GetSlotsForDayVariables, options?: ExecuteQueryOptions): QueryPromise<GetSlotsForDayData, GetSlotsForDayVariables>;
+
+interface GetActivePackageTemplatesRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetActivePackageTemplatesVariables): QueryRef<GetActivePackageTemplatesData, GetActivePackageTemplatesVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetActivePackageTemplatesVariables): QueryRef<GetActivePackageTemplatesData, GetActivePackageTemplatesVariables>;
+  operationName: string;
+}
+export const getActivePackageTemplatesRef: GetActivePackageTemplatesRef;
+
+export function getActivePackageTemplates(vars: GetActivePackageTemplatesVariables, options?: ExecuteQueryOptions): QueryPromise<GetActivePackageTemplatesData, GetActivePackageTemplatesVariables>;
+export function getActivePackageTemplates(dc: DataConnect, vars: GetActivePackageTemplatesVariables, options?: ExecuteQueryOptions): QueryPromise<GetActivePackageTemplatesData, GetActivePackageTemplatesVariables>;
+
+interface CreateClientPackageRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: CreateClientPackageVariables): MutationRef<CreateClientPackageData, CreateClientPackageVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: CreateClientPackageVariables): MutationRef<CreateClientPackageData, CreateClientPackageVariables>;
+  operationName: string;
+}
+export const createClientPackageRef: CreateClientPackageRef;
+
+export function createClientPackage(vars: CreateClientPackageVariables): MutationPromise<CreateClientPackageData, CreateClientPackageVariables>;
+export function createClientPackage(dc: DataConnect, vars: CreateClientPackageVariables): MutationPromise<CreateClientPackageData, CreateClientPackageVariables>;
+
+interface LogActivityRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: LogActivityVariables): MutationRef<LogActivityData, LogActivityVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: LogActivityVariables): MutationRef<LogActivityData, LogActivityVariables>;
+  operationName: string;
+}
+export const logActivityRef: LogActivityRef;
+
+export function logActivity(vars: LogActivityVariables): MutationPromise<LogActivityData, LogActivityVariables>;
+export function logActivity(dc: DataConnect, vars: LogActivityVariables): MutationPromise<LogActivityData, LogActivityVariables>;
+
+interface GetInAppNotificationsRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: GetInAppNotificationsVariables): QueryRef<GetInAppNotificationsData, GetInAppNotificationsVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: GetInAppNotificationsVariables): QueryRef<GetInAppNotificationsData, GetInAppNotificationsVariables>;
+  operationName: string;
+}
+export const getInAppNotificationsRef: GetInAppNotificationsRef;
+
+export function getInAppNotifications(vars: GetInAppNotificationsVariables, options?: ExecuteQueryOptions): QueryPromise<GetInAppNotificationsData, GetInAppNotificationsVariables>;
+export function getInAppNotifications(dc: DataConnect, vars: GetInAppNotificationsVariables, options?: ExecuteQueryOptions): QueryPromise<GetInAppNotificationsData, GetInAppNotificationsVariables>;
+
+interface MarkNotificationReadRef {
+  /* Allow users to create refs without passing in DataConnect */
+  (vars: MarkNotificationReadVariables): MutationRef<MarkNotificationReadData, MarkNotificationReadVariables>;
+  /* Allow users to pass in custom DataConnect instances */
+  (dc: DataConnect, vars: MarkNotificationReadVariables): MutationRef<MarkNotificationReadData, MarkNotificationReadVariables>;
+  operationName: string;
+}
+export const markNotificationReadRef: MarkNotificationReadRef;
+
+export function markNotificationRead(vars: MarkNotificationReadVariables): MutationPromise<MarkNotificationReadData, MarkNotificationReadVariables>;
+export function markNotificationRead(dc: DataConnect, vars: MarkNotificationReadVariables): MutationPromise<MarkNotificationReadData, MarkNotificationReadVariables>;
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getActiveServices, getOrgProfiles, searchClients, createAppointment } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
 import Modal from './Modal'
@@ -52,12 +53,30 @@ export default function AddAppointmentModal({ isOpen, onClose, onCreated, defaul
   // Fetch services and staff on open
   useEffect(() => {
     if (!isOpen || !profile?.org_id) return
-    supabase.from('services').select('id, name, duration_minutes, price')
-      .eq('org_id', profile.org_id).eq('is_archived', false).order('name')
-      .then(({ data }) => setServices(data || []))
-    supabase.from('profiles').select('id, full_name, role')
-      .eq('org_id', profile.org_id).in('role', ['admin', 'manager', 'staff']).eq('is_active', true).order('full_name')
-      .then(({ data }) => setStaff(data || []))
+    getActiveServices(dataconnect, { orgId: profile.org_id })
+      .then(({ data }) => {
+        const svcs = (data?.services || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          duration_minutes: s.durationMinutes,
+          price: s.price
+        }))
+        setServices(svcs as any)
+      })
+      .catch(err => console.error(err))
+
+    getOrgProfiles(dataconnect, { orgId: profile.org_id })
+      .then(({ data }) => {
+        const staffList = (data?.profiles || [])
+          .filter((p: any) => ['admin', 'manager', 'staff'].includes(p.role) && p.isActive)
+          .map((p: any) => ({
+            id: p.id,
+            full_name: p.fullName,
+            role: p.role
+          }))
+        setStaff(staffList as any)
+      })
+      .catch(err => console.error(err))
   }, [isOpen, profile?.org_id])
 
   // Debounced client search
@@ -66,12 +85,8 @@ export default function AddAppointmentModal({ isOpen, onClose, onCreated, defaul
     clearTimeout(searchTimer.current)
     if (!clientSearch.trim()) { setClients([]); return }
     searchTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('clients').select('id, name, email')
-        .eq('org_id', profile.org_id)
-        .ilike('name', `%${clientSearch}%`)
-        .limit(8)
-      setClients(data || [])
+      const { data } = await searchClients(dataconnect, { orgId: profile.org_id, query: clientSearch })
+      setClients((data?.clients || []) as any)
       setShowClientDropdown(true)
     }, 300)
     return () => clearTimeout(searchTimer.current)
@@ -104,18 +119,17 @@ export default function AddAppointmentModal({ isOpen, onClose, onCreated, defaul
     setError('')
     try {
       const scheduledAt = new Date(`${date}T${time}`).toISOString()
-      const { error: err } = await supabase.from('appointments').insert({
-        org_id: profile.org_id,
-        client_id: selectedClient.id,
-        service_id: serviceId || null,
-        staff_id: staffId || null,
-        scheduled_at: scheduledAt,
-        duration_minutes: duration,
+      await createAppointment(dataconnect, {
+        orgId: profile.org_id,
+        clientId: selectedClient.id,
+        serviceId: serviceId || null,
+        staffId: staffId || null,
+        scheduledAt,
+        durationMinutes: duration,
         status: 'confirmed',
         amount: amount ? parseFloat(amount) : 0,
         notes: notes || null,
       })
-      if (err) throw err
       logActivity({
         org_id: profile.org_id,
         user_id: profile.user_id,
@@ -126,7 +140,7 @@ export default function AddAppointmentModal({ isOpen, onClose, onCreated, defaul
       showToast('Appointment created', 'success')
       onCreated?.()
       onClose()
-    } catch (e) {
+    } catch (e: any) {
       setError(e.message || 'Failed to create appointment')
     } finally {
       setSaving(false)

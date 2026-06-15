@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgAppointments } from '@bridgeway/database'
 import { STATUS_LABELS, SERVICE_COLORS } from '../lib/appointmentStatus'
 
 const HOUR_START = 7   // 7 AM
@@ -20,20 +21,29 @@ export default function DayTimeline() {
   async function fetchToday() {
     setLoading(true)
     const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime()
 
     try {
-      const { data } = await supabase
-        .from('appointments')
-        .select('id, scheduled_at, duration_minutes, status, services(name), clients(name)')
-        .eq('org_id', profile.org_id)
-        .gte('scheduled_at', start)
-        .lte('scheduled_at', end)
-        .neq('status', 'cancelled')
-        .order('scheduled_at')
-      setAppointments(data || [])
-    } catch {
+      const { data } = await getOrgAppointments(dataconnect, { orgId: profile.org_id })
+      const appts = (data?.appointments || [])
+        .filter((a: any) => {
+          const t = new Date(a.scheduledAt).getTime()
+          return t >= todayStart && t <= todayEnd && a.status !== 'cancelled'
+        })
+        .map((a: any) => ({
+          id: a.id,
+          scheduled_at: a.scheduledAt,
+          duration_minutes: a.durationMinutes,
+          status: a.status,
+          services: a.service ? { name: a.service.name } : null,
+          clients: a.client ? { name: a.client.name } : null
+        }))
+        .sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())
+      
+      setAppointments(appts as any)
+    } catch (err) {
+      console.error(err)
       setAppointments([])
     } finally {
       setLoading(false)

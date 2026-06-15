@@ -1,4 +1,5 @@
-import { supabase } from './supabase'
+import { dataconnect } from './firebase'
+import { logActivity as logActivityDC } from '@bridgeway/database'
 
 /**
  * Log a user action to the activity_log table.
@@ -14,15 +15,16 @@ import { supabase } from './supabase'
  */
 export async function logActivity({ org_id, user_id, action, entity_type, entity_id, metadata = {} }) {
   try {
-    await supabase.from('activity_log').insert({
-      org_id,
-      user_id: user_id || null,
+    await logActivityDC(dataconnect, {
+      orgId: org_id,
+      userId: user_id || null,
       action,
-      entity_type: entity_type || null,
-      entity_id: entity_id || null,
+      entityType: entity_type || null,
+      entityId: entity_id || null,
       metadata,
     })
-  } catch {
-    // Activity logging is fire-and-forget; never block the caller
+  } catch (err) {
+    console.error('Failed to log activity:', err)
   }
 }
+

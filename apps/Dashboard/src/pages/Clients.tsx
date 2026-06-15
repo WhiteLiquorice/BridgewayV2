@@ -3,7 +3,8 @@ import { useNavigate, useOutletContext } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { useTerminology } from '../context/TerminologyContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgClients } from '@bridgeway/database'
 import { downloadCSV } from '../lib/csvExport'
 
 export default function Clients() {
@@ -18,13 +19,20 @@ export default function Clients() {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients', orgId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('id, name, email, phone, created_at, appointments(id, scheduled_at, amount, status)')
-        .eq('org_id', orgId)
-        .order('name', { ascending: true })
-      if (error) throw error
-      return data
+      const { data } = await getOrgClients(dataconnect, { orgId })
+      return (data.clients || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        created_at: c.createdAt,
+        appointments: (c.appointments_on_client || []).map((a: any) => ({
+          id: a.id,
+          scheduled_at: a.scheduledAt,
+          amount: a.amount,
+          status: a.status
+        }))
+      }))
     },
     enabled: !!orgId,
   })

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { searchClients, getClientAppointments } from '@bridgeway/database'
 import { createPortal } from 'react-dom'
 
 const PAGES = [
@@ -37,19 +38,14 @@ export default function CommandPalette({ isOpen, onClose, onNewAppointment, onNe
     }
   }, [isOpen])
 
-  // Debounced client search — include phone in select
+  // Debounced client search
   useEffect(() => {
     if (!profile?.org_id) return
     clearTimeout(searchTimer.current)
     if (!query.trim()) { setClients([]); setClientPreviews({}); return }
     searchTimer.current = setTimeout(async () => {
-      const { data } = await supabase
-        .from('clients')
-        .select('id, name, email, phone')
-        .eq('org_id', profile.org_id)
-        .ilike('name', `%${query}%`)
-        .limit(5)
-      setClients(data || [])
+      const { data } = await searchClients(dataconnect, { orgId: profile.org_id, query })
+      setClients((data?.clients || []) as any)
     }, 200)
     return () => clearTimeout(searchTimer.current)
   }, [query, profile?.org_id])
@@ -64,7 +60,7 @@ export default function CommandPalette({ isOpen, onClose, onNewAppointment, onNe
 
   const allResults = [
     ...filteredPages.map(p => ({ type: 'page', ...p })),
-    ...clients.map(c => ({ type: 'client', label: c.name, sublabel: c.email, id: c.id, phone: c.phone })),
+    ...clients.map((c: any) => ({ type: 'client', label: c.name, sublabel: c.email, id: c.id, phone: c.phone })),
     ...actions.map(a => ({ type: 'action', ...a })),
   ]
 
@@ -77,28 +73,25 @@ export default function CommandPalette({ isOpen, onClose, onNewAppointment, onNe
     if (clientPreviews[clientId] !== undefined) return // already fetched
 
     previewTimer.current = setTimeout(async () => {
-      const now = new Date().toISOString()
-      const { data: appts } = await supabase
-        .from('appointments')
-        .select('id, scheduled_at, service:services!service_id(name)')
-        .eq('org_id', profile.org_id)
-        .eq('client_id', clientId)
-        .gte('scheduled_at', now)
-        .in('status', ['confirmed', 'arrived'])
-        .order('scheduled_at')
-        .limit(1)
-
-      const { count } = await supabase
-        .from('appointments')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', profile.org_id)
-        .eq('client_id', clientId)
+      const { data: apptData } = await getClientAppointments(dataconnect, { clientId })
+      const appts = apptData?.appointments || []
+      
+      const now = new Date()
+      const upcoming = appts
+        .filter((a: any) => new Date(a.scheduledAt).getTime() >= now.getTime() && ['confirmed', 'arrived'].includes(a.status))
+        .sort((a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+        
+      const nextAppt = upcoming[0] ? {
+        id: upcoming[0].id,
+        scheduled_at: upcoming[0].scheduledAt,
+        service: upcoming[0].service ? { name: upcoming[0].service.name } : null
+      } : null
 
       setClientPreviews(prev => ({
         ...prev,
         [clientId]: {
-          apptCount: count || 0,
-          nextAppt: appts?.[0] || null,
+          apptCount: appts.length,
+          nextAppt: nextAppt,
         },
       }))
     }, 150)

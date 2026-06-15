@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { createClient } from '@bridgeway/database'
+import { dataconnect } from '../lib/firebase'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
 
@@ -296,8 +297,15 @@ export default function ClientImporter() {
     for (let i = 0; i < totalRecords; i += chunkSize) {
       const chunk = recordsToInsert.slice(i, i + chunkSize)
       try {
-        const { error } = await supabase.from('clients').insert(chunk)
-        if (error) throw error
+        await Promise.all(chunk.map(c => createClient(dataconnect, {
+          orgId: orgId,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          dateOfBirth: c.date_of_birth,
+          address: c.address,
+          notes: c.notes
+        })))
         successCount += chunk.length
       } catch (err) {
         failedCount += chunk.length

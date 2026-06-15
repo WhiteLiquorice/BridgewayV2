@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { useTerminology } from '../context/TerminologyContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getClientDetail, getActivePackageTemplates, createClientPackage, updateAppointmentStatus } from '@bridgeway/database'
 import { functions } from '../lib/firebase'
 import { httpsCallable } from 'firebase/functions'
 import { STATUS_LABELS, getStatusStyle, getNextStatus, NEXT_ACTION_LABELS, NEXT_ACTION_STYLES } from '../lib/appointmentStatus'
@@ -34,21 +35,50 @@ export default function ClientDetail() {
   const { data: clientData, isLoading, refetch: refetchClient } = useQuery({
     queryKey: ['client-detail', id, orgId],
     queryFn: async () => {
-      const [clientRes, apptRes, pkgRes, classRes] = await Promise.all([
-        supabase.from('clients').select('*').eq('id', id).eq('org_id', orgId).maybeSingle(),
-        supabase.from('appointments').select('id, scheduled_at, status, amount, notes, duration_minutes, services(name)')
-          .eq('client_id', id).eq('org_id', orgId).order('scheduled_at', { ascending: false }),
-        supabase.from('client_packages').select('*').eq('client_id', id).eq('org_id', orgId)
-          .order('created_at', { ascending: false }),
-        supabase.from('class_registrations').select('*, class:classes!class_id(name, start_time, day_of_week)')
-          .eq('client_id', id).eq('org_id', orgId).order('class_date', { ascending: false }),
-      ])
-      if (clientRes.error) throw clientRes.error
+      const { data } = await getClientDetail(dataconnect, { id })
+      const client = data?.client
+      if (!client) return { client: null, appointments: [], packages: [], classHistory: [] }
+      
       return {
-        client: clientRes.data,
-        appointments: apptRes.data || [],
-        packages: pkgRes.data || [],
-        classHistory: classRes.data || [],
+        client: {
+          id: client.id,
+          name: client.name,
+          email: client.email,
+          phone: client.phone,
+          created_at: client.createdAt,
+          date_of_birth: client.dateOfBirth,
+          address: client.address,
+          notes: client.notes
+        },
+        appointments: (client.appointments_on_client || []).map((a: any) => ({
+          id: a.id,
+          scheduled_at: a.scheduledAt,
+          status: a.status,
+          amount: a.amount,
+          notes: a.notes,
+          duration_minutes: a.durationMinutes,
+          services: a.service ? { name: a.service.name } : null
+        })),
+        packages: (client.clientPackages_on_client || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          total_sessions: p.totalSessions,
+          used_sessions: p.usedSessions,
+          price: p.price,
+          purchased_at: p.purchasedAt,
+          expires_at: p.expiresAt,
+          status: p.status
+        })),
+        classHistory: (client.classRegistrations_on_client || []).map((r: any) => ({
+          id: r.id,
+          class_date: r.classDate,
+          status: r.status,
+          class: r.classEntity ? {
+            name: r.classEntity.name,
+            start_time: r.classEntity.startTime,
+            duration_minutes: r.classEntity.durationMinutes
+          } : null
+        }))
       }
     },
     enabled: !!orgId && !!id,
@@ -57,9 +87,18 @@ export default function ClientDetail() {
   // Load package templates separately (not part of main query)
   useEffect(() => {
     if (!orgId) return
-    supabase.from('package_templates').select('*')
-      .eq('org_id', orgId).eq('is_active', true).order('name')
-      .then(({ data }) => setPkgTemplates(data || []))
+    getActivePackageTemplates(dataconnect, { orgId })
+      .then(({ data }) => {
+        const templates = (data?.packageTemplates || []).map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          session_count: t.sessionCount,
+          price: t.price,
+          expiry_days: t.expiryDays
+        }))
+        setPkgTemplates(templates as any)
+      })
+      .catch(err => console.error(err))
   }, [orgId])
 
   // Sync localAppointments from query data (reset on fresh fetch)
@@ -99,20 +138,20 @@ export default function ClientDetail() {
     e.preventDefault()
     setSavingPkg(true)
     try {
-      const { error } = await supabase.from('client_packages').insert({
-        org_id: profile.org_id,
-        client_id: id,
+      const expiresAt = pkgForm.expires_at ? new Date(pkgForm.expires_at).toISOString() : null
+      await createClientPackage(dataconnect, {
+        orgId: profile.org_id,
+        clientId: id,
         name: pkgForm.name.trim(),
-        total_sessions: parseInt(pkgForm.total_sessions),
+        totalSessions: parseInt(pkgForm.total_sessions),
         price: pkgForm.price ? parseFloat(pkgForm.price) : 0,
-        expires_at: pkgForm.expires_at || null,
+        expiresAt: expiresAt,
       })
-      if (error) throw error
       showToast('Package added', 'success')
       setShowAddPkg(false)
       setPkgForm({ name: '', total_sessions: 10, price: '', expires_at: '' })
       refetchClient()
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     } finally {
       setSavingPkg(false)
@@ -124,7 +163,7 @@ export default function ClientDetail() {
     if (!next) return
     setUpdating(apptId)
     try {
-      await supabase.from('appointments').update({ status: next }).eq('id', apptId)
+      await updateAppointmentStatus(dataconnect, { id: apptId, status: next })
       setLocalAppointments(prev => (prev ?? []).map(a => a.id === apptId ? { ...a, status: next } : a))
     } catch { /* silent */ }
     finally { setUpdating(null) }
@@ -133,7 +172,7 @@ export default function ClientDetail() {
   async function cancelAppointment(apptId) {
     setUpdating(apptId)
     try {
-      await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', apptId)
+      await updateAppointmentStatus(dataconnect, { id: apptId, status: 'cancelled' })
       setLocalAppointments(prev => (prev ?? []).map(a => a.id === apptId ? { ...a, status: 'cancelled' } : a))
     } catch { /* silent */ }
     finally { setUpdating(null) }

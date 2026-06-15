@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgAppointments, updateAppointmentStatus } from '@bridgeway/database'
 import { STATUS_LABELS, getStatusStyle, getNextStatus, NEXT_ACTION_LABELS, NEXT_ACTION_STYLES } from '../lib/appointmentStatus'
 import { downloadCSV } from '../lib/csvExport'
 
@@ -33,24 +34,36 @@ export default function Appointments() {
   const { data: queryResult = { appointments: [], total: 0 }, isLoading } = useQuery({
     queryKey: ['appointments', orgId, filters, page],
     queryFn: async () => {
-      let query = supabase
-        .from('appointments')
-        .select('id, scheduled_at, status, amount, clients(id, name), services(name)', { count: 'exact' })
-        .eq('org_id', orgId)
-        .order('scheduled_at', { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      const { data } = await getOrgAppointments(dataconnect, { orgId })
+      let list = (data?.appointments || []).map((a: any) => ({
+        id: a.id,
+        scheduled_at: a.scheduledAt,
+        status: a.status,
+        amount: a.amount,
+        clients: a.client ? { id: a.client.id, name: a.client.name } : null,
+        services: a.service ? { name: a.service.name } : null
+      }))
 
-      if (statusFilter) query = query.eq('status', statusFilter)
-      if (dateFrom)     query = query.gte('scheduled_at', new Date(dateFrom).toISOString())
+      // Apply Filters in-memory
+      if (statusFilter) {
+        list = list.filter(a => a.status === statusFilter)
+      }
+      if (dateFrom) {
+        const fromTime = new Date(dateFrom).getTime()
+        list = list.filter(a => new Date(a.scheduled_at).getTime() >= fromTime)
+      }
       if (dateTo) {
         const end = new Date(dateTo)
         end.setHours(23, 59, 59, 999)
-        query = query.lte('scheduled_at', end.toISOString())
+        const toTime = end.getTime()
+        list = list.filter(a => new Date(a.scheduled_at).getTime() <= toTime)
       }
 
-      const { data, count, error } = await query
-      if (error) throw error
-      return { appointments: data || [], total: count || 0 }
+      const total = list.length
+      // Apply Pagination
+      const paginated = list.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+      
+      return { appointments: paginated, total }
     },
     enabled: !!orgId,
   })
@@ -59,8 +72,7 @@ export default function Appointments() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }) => {
-      const { error } = await supabase.from('appointments').update({ status }).eq('id', id)
-      if (error) throw error
+      await updateAppointmentStatus(dataconnect, { id, status })
     },
     onMutate: async ({ id, status }) => {
       await queryClient.cancelQueries({ queryKey: ['appointments'] })

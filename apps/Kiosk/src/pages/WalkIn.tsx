@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { getBookingPageData, createQueueEntry, getOrgQueue } from '@bridgeway/database'
+import { dataconnect } from '../lib/firebase'
 import { useOrg, useResetInactivity } from '../App'
 
 export default function WalkIn() {
@@ -16,36 +17,33 @@ export default function WalkIn() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!org) return
-    supabase
-      .from('services')
-      .select('id, name')
-      .eq('org_id', org.id)
-      .eq('is_active', true)
-      .order('name')
-      .then(({ data }) => setServices(data || []))
+    if (!org?.slug) return
+    getBookingPageData(dataconnect, { slug: org.slug })
+      .then(({ data }) => {
+        setServices((data?.orgs?.[0]?.services_on_org || []) as any)
+      })
+      .catch(err => console.error('Error fetching services:', err))
   }, [org])
 
   async function submit() {
     if (!name.trim() || !org) return
     setSubmitting(true)
     try {
-      const { count } = await supabase
-        .from('queue_entries')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', org.id)
-        .in('status', ['waiting', 'serving'])
+      const { data: queueData } = await getOrgQueue(dataconnect, { orgId: org.id })
+      const activeEntries = (queueData?.queueEntries || []).filter(
+        (entry: any) => entry.status === 'waiting' || entry.status === 'serving'
+      )
+      const count = activeEntries.length
 
-      const { error } = await supabase.from('queue_entries').insert({
-        org_id:      org.id,
-        client_name: name.trim(),
-        service_id:  serviceId || null,
+      await createQueueEntry(dataconnect, {
+        orgId:      org.id,
+        clientName: name.trim(),
+        serviceId:  serviceId || null,
         status:      'waiting',
-        position:    (count || 0) + 1,
+        position:    count + 1,
       })
-      if (error) throw error
       navigate('/done', { state: { type: 'walkin', name: name.trim() } })
-    } catch (err) {
+    } catch (err: any) {
       alert(err.message || 'Something went wrong. Please try again.')
       setSubmitting(false)
     }

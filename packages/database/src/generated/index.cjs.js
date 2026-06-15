@@ -282,6 +282,21 @@ exports.getClientByEmail = function getClientByEmail(dcOrVars, varsOrOptions, op
 }
 ;
 
+const getClientByPhoneRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetClientByPhone', inputVars);
+}
+getClientByPhoneRef.operationName = 'GetClientByPhone';
+exports.getClientByPhoneRef = getClientByPhoneRef;
+
+exports.getClientByPhone = function getClientByPhone(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getClientByPhoneRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
 const getClientAppointmentsRef = (dcOrVars, vars) => {
   const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
   dcInstance._useGeneratedSdk();
@@ -381,5 +396,222 @@ exports.createServiceRef = createServiceRef;
 exports.createService = function createService(dcOrVars, vars) {
   const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
   return executeMutation(createServiceRef(dcInstance, inputVars));
+}
+;
+
+const getOrgClientsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetOrgClients', inputVars);
+}
+getOrgClientsRef.operationName = 'GetOrgClients';
+exports.getOrgClientsRef = getOrgClientsRef;
+
+exports.getOrgClients = function getOrgClients(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getOrgClientsRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const getClientDetailRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetClientDetail', inputVars);
+}
+getClientDetailRef.operationName = 'GetClientDetail';
+exports.getClientDetailRef = getClientDetailRef;
+
+exports.getClientDetail = function getClientDetail(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getClientDetailRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const createClientRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'CreateClient', inputVars);
+}
+createClientRef.operationName = 'CreateClient';
+exports.createClientRef = createClientRef;
+
+exports.createClient = function createClient(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createClientRef(dcInstance, inputVars));
+}
+;
+
+const updateClientRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'UpdateClient', inputVars);
+}
+updateClientRef.operationName = 'UpdateClient';
+exports.updateClientRef = updateClientRef;
+
+exports.updateClient = function updateClient(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(updateClientRef(dcInstance, inputVars));
+}
+;
+
+const getOrgQueueRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetOrgQueue', inputVars);
+}
+getOrgQueueRef.operationName = 'GetOrgQueue';
+exports.getOrgQueueRef = getOrgQueueRef;
+
+exports.getOrgQueue = function getOrgQueue(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getOrgQueueRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const createQueueEntryRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'CreateQueueEntry', inputVars);
+}
+createQueueEntryRef.operationName = 'CreateQueueEntry';
+exports.createQueueEntryRef = createQueueEntryRef;
+
+exports.createQueueEntry = function createQueueEntry(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createQueueEntryRef(dcInstance, inputVars));
+}
+;
+
+const updateQueueStatusRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'UpdateQueueStatus', inputVars);
+}
+updateQueueStatusRef.operationName = 'UpdateQueueStatus';
+exports.updateQueueStatusRef = updateQueueStatusRef;
+
+exports.updateQueueStatus = function updateQueueStatus(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(updateQueueStatusRef(dcInstance, inputVars));
+}
+;
+
+const deleteQueueEntryRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'DeleteQueueEntry', inputVars);
+}
+deleteQueueEntryRef.operationName = 'DeleteQueueEntry';
+exports.deleteQueueEntryRef = deleteQueueEntryRef;
+
+exports.deleteQueueEntry = function deleteQueueEntry(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(deleteQueueEntryRef(dcInstance, inputVars));
+}
+;
+
+const getUpcomingOrgAppointmentsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetUpcomingOrgAppointments', inputVars);
+}
+getUpcomingOrgAppointmentsRef.operationName = 'GetUpcomingOrgAppointments';
+exports.getUpcomingOrgAppointmentsRef = getUpcomingOrgAppointmentsRef;
+
+exports.getUpcomingOrgAppointments = function getUpcomingOrgAppointments(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getUpcomingOrgAppointmentsRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const getSlotsForDayRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetSlotsForDay', inputVars);
+}
+getSlotsForDayRef.operationName = 'GetSlotsForDay';
+exports.getSlotsForDayRef = getSlotsForDayRef;
+
+exports.getSlotsForDay = function getSlotsForDay(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getSlotsForDayRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const getActivePackageTemplatesRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetActivePackageTemplates', inputVars);
+}
+getActivePackageTemplatesRef.operationName = 'GetActivePackageTemplates';
+exports.getActivePackageTemplatesRef = getActivePackageTemplatesRef;
+
+exports.getActivePackageTemplates = function getActivePackageTemplates(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getActivePackageTemplatesRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const createClientPackageRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'CreateClientPackage', inputVars);
+}
+createClientPackageRef.operationName = 'CreateClientPackage';
+exports.createClientPackageRef = createClientPackageRef;
+
+exports.createClientPackage = function createClientPackage(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(createClientPackageRef(dcInstance, inputVars));
+}
+;
+
+const logActivityRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'LogActivity', inputVars);
+}
+logActivityRef.operationName = 'LogActivity';
+exports.logActivityRef = logActivityRef;
+
+exports.logActivity = function logActivity(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(logActivityRef(dcInstance, inputVars));
+}
+;
+
+const getInAppNotificationsRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return queryRef(dcInstance, 'GetInAppNotifications', inputVars);
+}
+getInAppNotificationsRef.operationName = 'GetInAppNotifications';
+exports.getInAppNotificationsRef = getInAppNotificationsRef;
+
+exports.getInAppNotifications = function getInAppNotifications(dcOrVars, varsOrOptions, options) {
+  
+  const { dc: dcInstance, vars: inputVars, options: inputOpts } = validateArgsWithOptions(connectorConfig, dcOrVars, varsOrOptions, options, true, true);
+  return executeQuery(getInAppNotificationsRef(dcInstance, inputVars), inputOpts && { fetchPolicy: inputOpts.fetchPolicy });
+}
+;
+
+const markNotificationReadRef = (dcOrVars, vars) => {
+  const { dc: dcInstance, vars: inputVars} = validateArgs(connectorConfig, dcOrVars, vars, true);
+  dcInstance._useGeneratedSdk();
+  return mutationRef(dcInstance, 'MarkNotificationRead', inputVars);
+}
+markNotificationReadRef.operationName = 'MarkNotificationRead';
+exports.markNotificationReadRef = markNotificationReadRef;
+
+exports.markNotificationRead = function markNotificationRead(dcOrVars, vars) {
+  const { dc: dcInstance, vars: inputVars } = validateArgs(connectorConfig, dcOrVars, vars, true);
+  return executeMutation(markNotificationReadRef(dcInstance, inputVars));
 }
 ;

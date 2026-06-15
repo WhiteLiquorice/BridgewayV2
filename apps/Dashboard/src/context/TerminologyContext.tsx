@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgSettings } from '@bridgeway/database'
 import { useAuth } from './AuthContext'
 
 const DEFAULT_TERMS = {
@@ -20,21 +21,13 @@ export function TerminologyProvider({ children }) {
     if (!orgId) return
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('org_settings')
-        .select('terminology')
-        .eq('org_id', orgId)
-        .maybeSingle()
-      if (data?.terminology) {
-        // Merge so missing keys fall back to defaults
-        setTerms({
-          client:      { ...DEFAULT_TERMS.client,      ...(data.terminology.client      || {}) },
-          appointment: { ...DEFAULT_TERMS.appointment, ...(data.terminology.appointment || {}) },
-          staff:       { ...DEFAULT_TERMS.staff,       ...(data.terminology.staff       || {}) },
-        })
-      } else {
-        setTerms(DEFAULT_TERMS)
-      }
+      const { data } = await getOrgSettings(dataconnect, { orgId })
+      const settings = data?.orgSettings?.[0]
+      // Since terminology is not stored in V2 schema, we use default terms
+      setTerms(DEFAULT_TERMS)
+    } catch (err) {
+      console.error('Failed to load terminology:', err)
+      setTerms(DEFAULT_TERMS)
     } finally {
       setLoading(false)
     }
