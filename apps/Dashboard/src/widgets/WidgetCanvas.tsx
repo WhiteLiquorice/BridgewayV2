@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, rectSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgSettings } from '@bridgeway/database'
 import { useAuth } from '../context/AuthContext'
 import { useWidgetConfig } from './useWidgetConfig'
 import { WIDGETS, canRoleSeeWidget } from './registry'
@@ -65,7 +66,7 @@ export default function WidgetCanvas() {
   // Pass user?.id (stable string) rather than the user object so that token
   // refreshes — which create a new user object reference — don't re-fire the
   // useWidgetConfig effect and force all widgets into a full remount cycle.
-  const { config, loading, reorder, toggleHidden, isHidden, getWidth, getHeight, setWidth, setHeight } = useWidgetConfig(user?.id, role)
+  const { config, loading, reorder, toggleHidden, isHidden, getWidth, getHeight, setWidth, setHeight } = useWidgetConfig(user?.id, role, profile?.org_id)
   const [editMode, setEditMode] = useState(false)
   const [disabledWidgets, setDisabledWidgets] = useState([])
 
@@ -77,13 +78,10 @@ export default function WidgetCanvas() {
     if (!orgId) return
     let cancelled = false
     ;(async () => {
-      const { data } = await supabase
-        .from('org_settings')
-        .select('disabled_widgets')
-        .eq('org_id', orgId)
-        .maybeSingle()
-      if (!cancelled && data?.disabled_widgets) {
-        setDisabledWidgets(data.disabled_widgets)
+      const { data } = await getOrgSettings(dataconnect, { orgId })
+      const settings = data?.orgSettings?.[0]
+      if (!cancelled && settings?.disabledWidgets) {
+        setDisabledWidgets(settings.disabledWidgets as any)
       }
     })()
     return () => { cancelled = true }

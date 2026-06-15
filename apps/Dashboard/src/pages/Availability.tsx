@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getUpcomingSlots, getOrgProfiles, createSlot, updateSlotStatus, deleteSlot } from '@bridgeway/database'
 
 const inputCls = 'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand/50'
 
@@ -34,14 +35,15 @@ export default function Availability() {
   async function fetchSlots() {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('slots')
-        .select('id, start_time, end_time, status, staff_id, profiles(full_name)')
-        .eq('org_id', profile.org_id)
-        .gte('start_time', new Date().toISOString())
-        .order('start_time')
-        .limit(50)
-      setSlots(data || [])
+      const { data } = await getUpcomingSlots(dataconnect, { orgId: profile.org_id, now: new Date().toISOString() })
+      setSlots((data?.slots || []).map((s: any) => ({
+        id: s.id,
+        start_time: s.startTime,
+        end_time: s.endTime,
+        status: s.status,
+        staff_id: s.staff?.id,
+        profiles: s.staff ? { full_name: s.staff.fullName } : null
+      })))
     } catch {
       setSlots([])
     } finally {
@@ -51,14 +53,13 @@ export default function Availability() {
 
   async function fetchStaff() {
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .eq('org_id', profile.org_id)
-        .in('role', ['admin', 'manager', 'staff'])
-        .eq('is_active', true)
-        .order('full_name')
-      setStaffList(data || [])
+      const { data } = await getOrgProfiles(dataconnect, { orgId: profile.org_id })
+      setStaffList((data?.profiles || [])
+        .filter((p: any) => p.isActive && ['admin', 'manager', 'staff'].includes(p.role))
+        .map((p: any) => ({
+          id: p.id,
+          full_name: p.fullName
+        })))
     } catch {
       setStaffList([])
     }
@@ -73,19 +74,14 @@ export default function Availability() {
     setAdding(true)
     setAddError(null)
     try {
-      const { data, error } = await supabase
-        .from('slots')
-        .insert({
-          org_id:     profile.org_id,
-          start_time: start.toISOString(),
-          end_time:   end.toISOString(),
-          status:     'available',
-          staff_id:   staffId || null,
-        })
-        .select('id, start_time, end_time, status, staff_id, profiles(full_name)')
-        .single()
-      if (error) { setAddError(error.message); return }
-      setSlots(prev => [data, ...prev].sort((a, b) => new Date(a.start_time) - new Date(b.start_time)))
+      await createSlot(dataconnect, {
+        orgId:     profile.org_id,
+        startTime: start.toISOString(),
+        endTime:   end.toISOString(),
+        status:     'available',
+        staffId:   staffId || null,
+      })
+      fetchSlots()
       // Reset form
       setStartTime('09:00')
       setEndTime('10:00')
@@ -98,14 +94,14 @@ export default function Availability() {
 
   async function handleBlock(id) {
     try {
-      await supabase.from('slots').update({ status: 'blocked' }).eq('id', id)
+      await updateSlotStatus(dataconnect, { id, status: 'blocked' })
       setSlots(prev => prev.map(s => s.id === id ? { ...s, status: 'blocked' } : s))
     } catch { /* silent */ }
   }
 
   async function handleDelete(id) {
     try {
-      await supabase.from('slots').delete().eq('id', id)
+      await deleteSlot(dataconnect, { id })
       setSlots(prev => prev.filter(s => s.id !== id))
     } catch { /* silent */ }
   }

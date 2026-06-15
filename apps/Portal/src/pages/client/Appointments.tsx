@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getClientAppointments, updateAppointmentStatus } from '@bridgeway/database'
 
 function StatusBadge({ status }) {
   const styles = {
@@ -30,34 +31,34 @@ const TABS = [
 ]
 
 export default function ClientAppointments() {
-  const { profile } = useAuth()
+  const { profile, clientId } = useAuth()
   const { primaryColor } = useTheme()
-  const clientId = profile?.id
 
   const [appointments, setAppointments] = useState([])
   const [cancelWindow, setCancelWindow] = useState(18)
   const [loading,   setLoading]   = useState(true)
   const [tab,       setTab]       = useState('all')
-  const [cancelMsg, setCancelMsg] = useState(null)
+  const [cancelMsg, setCancelMsg] = useState<any>(null)
 
   useEffect(() => {
-    if (!clientId) return
+    if (!clientId) {
+      setLoading(false)
+      return
+    }
     fetchData()
   }, [clientId])
 
   async function fetchData() {
     setLoading(true)
     try {
-      const [apptsRes, settingsRes] = await Promise.all([
-        supabase.from('appointments').select('*')
-          .eq('client_id', clientId)
-          .order('scheduled_at', { ascending: false }),
-        supabase.from('cancellation_settings').select('pickup_window_hours').limit(1).maybeSingle(),
-      ])
-      setAppointments(apptsRes.data || [])
-      if (settingsRes.data?.pickup_window_hours != null) {
-        setCancelWindow(settingsRes.data.pickup_window_hours)
-      }
+      const apptsRes = await getClientAppointments(dataconnect, { clientId: clientId! })
+      const mapped = (apptsRes.data.appointments || []).map(a => ({
+        ...a,
+        service_name: a.service?.name || 'Appointment',
+        scheduled_at: a.scheduledAt
+      }))
+      setAppointments(mapped as any)
+      setCancelWindow(18) // Default fallback since cancellation_settings table doesn't exist in DataConnect
     } catch { /* leave stale */ } finally {
       setLoading(false)
     }
@@ -72,7 +73,7 @@ export default function ClientAppointments() {
 
   function canCancel(appt) {
     if (appt.status !== 'confirmed') return false
-    const hoursUntil = (new Date(appt.scheduled_at) - new Date()) / 3600000
+    const hoursUntil = (new Date(appt.scheduled_at).getTime() - new Date().getTime()) / 3600000
     return hoursUntil > cancelWindow
   }
 
@@ -81,17 +82,17 @@ export default function ClientAppointments() {
     const now = new Date()
     const apptTime = new Date(appt.scheduled_at)
     if (apptTime <= now) return false
-    return (apptTime - now) / 3600000 <= cancelWindow
+    return (apptTime.getTime() - now.getTime()) / 3600000 <= cancelWindow
   }
 
   async function handleCancel(appt) {
     if (!window.confirm(`Cancel your ${appt.service_name} appointment?`)) return
-    const { error } = await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', appt.id)
-    if (error) {
-      setCancelMsg({ type: 'error', text: error.message })
-    } else {
+    try {
+      await updateAppointmentStatus(dataconnect, { id: appt.id, status: 'cancelled' })
       setCancelMsg({ type: 'success', text: 'Appointment cancelled.' })
       fetchData()
+    } catch (err: any) {
+      setCancelMsg({ type: 'error', text: err.message || 'Failed to cancel appointment.' })
     }
     setTimeout(() => setCancelMsg(null), 4000)
   }

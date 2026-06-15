@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getBookingPageData } from '@bridgeway/database'
 
 const GuestOrgContext = createContext(null)
 
@@ -16,14 +17,28 @@ export function GuestOrgProvider({ children }) {
       setLoading(false)
       return
     }
-    supabase
-      .from('orgs')
-      .select('id, name, slug, primary_color, secondary_color, logo_url')
-      .eq('slug', slug)
-      .single()
-      .then(({ data, error: err }) => {
-        if (err || !data) setError('Organization not found.')
-        else setOrg(data)
+    getBookingPageData(dataconnect, { slug })
+      .then(({ data }) => {
+        const orgInfo = data.orgs[0]
+        if (!orgInfo) {
+          setError('Organization not found.')
+        } else {
+          setOrg({
+            ...orgInfo,
+            primary_color: orgInfo.primaryColor,
+            secondary_color: orgInfo.secondaryColor,
+            logo_url: orgInfo.logoUrl,
+            services: (orgInfo.services_on_org || []).map((s: any) => ({
+              ...s,
+              duration_minutes: s.durationMinutes
+            })),
+            booking_config: orgInfo.orgSetting_on_org?.bookingConfig || null
+          } as any)
+        }
+        setLoading(false)
+      })
+      .catch((err) => {
+        setError(err.message || 'Error loading organization.')
         setLoading(false)
       })
   }, [])

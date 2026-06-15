@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgClientPackages } from '@bridgeway/database'
 import EmptyState from '../components/EmptyState'
 
 export default function PackageTracker() {
@@ -20,15 +21,20 @@ export default function PackageTracker() {
       setLoading(true)
       setError(null)
       try {
-        const { data, error: err } = await supabase
-          .from('client_packages')
-          .select('*, client:clients!client_id(name, email)')
-          .eq('org_id', orgId)
-          .order('created_at', { ascending: false })
-
-        if (err) throw err
-        if (!cancelled) setPackages(data || [])
-      } catch (err) {
+        const { data } = await getOrgClientPackages(dataconnect, { orgId })
+        const list = (data?.clientPackages || []).map((pkg: any) => ({
+          id: pkg.id,
+          name: pkg.name,
+          total_sessions: pkg.totalSessions,
+          used_sessions: pkg.usedSessions,
+          price: pkg.price,
+          purchased_at: pkg.purchasedAt,
+          expires_at: pkg.expiresAt,
+          status: pkg.status,
+          client: pkg.client ? { name: pkg.client.name, email: pkg.client.email } : null,
+        }))
+        if (!cancelled) setPackages(list)
+      } catch (err: any) {
         if (!cancelled) setError(err.message)
       } finally {
         if (!cancelled) setLoading(false)
@@ -55,7 +61,6 @@ export default function PackageTracker() {
     return <EmptyState icon="inbox" title="No packages" message="Create packages from the Admin app's service catalog" />
   }
 
-  const now = new Date()
   const fourteenDays = new Date()
   fourteenDays.setDate(fourteenDays.getDate() + 14)
 
@@ -65,7 +70,6 @@ export default function PackageTracker() {
     const remaining = p.total_sessions - p.used_sessions
     return remaining <= 2 && remaining > 0
   })
-  const exhausted = packages.filter(p => p.status === 'exhausted' || p.status === 'expired')
 
   // Combined attention list: expiring OR low sessions (deduplicated)
   const attentionIds = new Set([...expiring.map(p => p.id), ...lowSessions.map(p => p.id)])

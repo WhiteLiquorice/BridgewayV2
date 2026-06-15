@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getProductsForInventory, createProduct, updateProduct, updateProductStock } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
 import Modal from '../components/Modal'
@@ -45,13 +46,17 @@ export default function Inventory() {
   const { data: products = [] as Product[], isLoading } = useQuery<Product[]>({
     queryKey: ['products', orgId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('org_id', orgId)
-        .order('name', { ascending: true })
-      if (error) throw error
-      return data || []
+      const { data } = await getProductsForInventory(dataconnect, { orgId: orgId! })
+      return (data?.products || []).map((p: any) => ({
+        id: p.id,
+        org_id: orgId!,
+        name: p.name,
+        price_cents: p.priceCents,
+        stock_count: p.stockCount,
+        low_stock_threshold: p.lowStockThreshold,
+        is_active: p.isActive,
+        created_at: p.createdAt
+      }))
     },
     enabled: !!orgId,
   })
@@ -67,12 +72,7 @@ export default function Inventory() {
     const newStock = Math.max(0, currentStock + delta)
     
     try {
-      const { error } = await supabase
-        .from('products')
-        .update({ stock_count: newStock })
-        .eq('id', product.id)
-      
-      if (error) throw error
+      await updateProductStock(dataconnect, { id: product.id, stockCount: newStock })
       
       refreshProducts()
       
@@ -134,23 +134,21 @@ export default function Inventory() {
 
     try {
       const priceCents = Math.round(price * 100)
-      const { data, error } = await supabase.from('products').insert({
-        org_id: orgId,
+      const { data } = await createProduct(dataconnect, {
+        orgId: orgId!,
         name: name.trim(),
-        price_cents: priceCents,
-        stock_count: stock,
-        low_stock_threshold: thresh,
-        is_active: isActive,
-      }).select('*').single()
-
-      if (error) throw error
+        priceCents,
+        stockCount: stock,
+        lowStockThreshold: thresh,
+        isActive,
+      })
 
       logActivity({
         org_id: orgId,
         user_id: profile?.user_id,
         action: 'product.created',
         entity_type: 'product',
-        entity_id: data.id,
+        entity_id: data?.product_insert?.id,
         metadata: { product_name: name.trim(), price_cents: priceCents, initial_stock: stock }
       })
 
@@ -180,17 +178,14 @@ export default function Inventory() {
 
     try {
       const priceCents = Math.round(price * 100)
-      const { error } = await supabase.from('products')
-        .update({
-          name: name.trim(),
-          price_cents: priceCents,
-          stock_count: stock,
-          low_stock_threshold: thresh,
-          is_active: isActive,
-        })
-        .eq('id', selectedProduct.id)
-
-      if (error) throw error
+      await updateProduct(dataconnect, {
+        id: selectedProduct.id,
+        name: name.trim(),
+        priceCents,
+        stockCount: stock,
+        lowStockThreshold: thresh,
+        isActive,
+      })
 
       logActivity({
         org_id: orgId,

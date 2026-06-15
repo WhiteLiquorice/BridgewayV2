@@ -168,6 +168,7 @@ type Product @table {
   name: String!
   priceCents: Int!
   stockCount: Int
+  lowStockThreshold: Int @default(value: 10)
   isActive: Boolean @default(value: true)
   createdAt: Timestamp! @default(expr: "request.time")
 }
@@ -250,16 +251,15 @@ type Announcement @table {
   postedAt: Timestamp! @default(expr: "request.time")
 }
 
-type WidgetConfig @table {
-  id: UUID! @default(expr: "uuidV4()")
-  userId: String! @unique
+type WidgetConfig @table(key: ["userId"]) {
+  userId: String!
   org: Org!
   config: Any! # Using Any for JSONB
   updatedAt: Timestamp! @default(expr: "request.time")
 }
 
-type NotificationSetting @table {
-  id: UUID! @default(expr: "uuidV4()")
+type NotificationSetting @table(key: ["org"]) {
+  id: UUID @default(expr: "uuidV4()")
   org: Org! @unique
   smsEnabled: Boolean @default(value: false)
   emailEnabled: Boolean @default(value: true)

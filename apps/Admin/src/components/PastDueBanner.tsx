@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
 
 export default function PastDueBanner() {
   const { orgSettings } = useAuth()

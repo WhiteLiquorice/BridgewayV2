@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgClients, getActiveServices, getPosProducts, getOrgProfiles, getClientDetail, updateClientPackageSessions, createPosTransaction, updateProductStock } from '@bridgeway/database'
 
 // TODO: Replace simulated payment with Stripe Elements + create-pos-payment-intent
 // edge function for real card processing.
@@ -28,15 +29,36 @@ export default function Checkout() {
   useEffect(() => {
     if (!org?.id) return
     Promise.all([
-      supabase.from('clients').select('id, full_name, email, phone').eq('org_id', org.id).order('full_name'),
-      supabase.from('services').select('id, name, price, duration').eq('org_id', org.id).eq('is_active', true),
-      supabase.from('products').select('id, name, price_cents').eq('org_id', org.id).eq('is_active', true),
-      supabase.from('profiles').select('id, full_name, commission_rate_percentage').eq('org_id', org.id).neq('role', 'patient').eq('is_active', true),
-    ]).then(([{ data: c }, { data: s }, { data: p }, { data: st }]) => {
-      setClients(c || [])
-      setServices(s || [])
-      setProducts(p || [])
-      setStaff(st || [])
+      getOrgClients(dataconnect, { orgId: org.id }),
+      getActiveServices(dataconnect, { orgId: org.id }),
+      getPosProducts(dataconnect, { orgId: org.id }),
+      getOrgProfiles(dataconnect, { orgId: org.id }),
+    ]).then(([clientsRes, servicesRes, productsRes, profilesRes]) => {
+      setClients((clientsRes.data?.clients || []).map((c: any) => ({
+        id: c.id,
+        full_name: c.name,
+        email: c.email,
+        phone: c.phone
+      })))
+      setServices((servicesRes.data?.services || []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        price: s.price,
+        duration: s.durationMinutes
+      })))
+      setProducts((productsRes.data?.products || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price_cents: p.priceCents,
+        stock_count: p.stockCount
+      })))
+      setStaff((profilesRes.data?.profiles || [])
+        .filter((p: any) => p.isActive && p.role !== 'patient')
+        .map((p: any) => ({
+          id: p.id,
+          full_name: p.fullName,
+          commission_rate_percentage: p.commissionRatePercentage
+        })))
     })
   }, [org?.id])
 
@@ -61,34 +83,32 @@ export default function Checkout() {
     const commissionRate = selectedStaff?.commission_rate_percentage ?? 0
     const commissionAmount = (subtotalCents / 100) * (commissionRate / 100)
 
-    if (selectedPackage) {
-      await supabase.from('client_packages')
-        .update({ used_sessions: selectedPackage.used_sessions + 1 })
-        .eq('id', selectedPackage.id)
-    }
+    try {
+      if (selectedPackage) {
+        await updateClientPackageSessions(dataconnect, { id: selectedPackage.id, usedSessions: selectedPackage.used_sessions + 1 })
+      }
 
-    const { error } = await supabase.from('pos_transactions').insert({
-      org_id: org.id,
-      client_id: selectedClient?.id || null,
-      staff_id: selectedStaff?.id || null,
-      items,
-      tip_cents: tipCents,
-      total_cents: totalCents,
-      commission_amount: commissionAmount,
-      status: 'completed', // TODO: integrate Stripe payment intent
-    })
+      await createPosTransaction(dataconnect, {
+        orgId: org.id,
+        clientId: selectedClient?.id || null,
+        staffId: selectedStaff?.id || null,
+        items,
+        tipCents,
+        totalCents,
+        commissionAmount,
+        status: 'completed',
+      })
 
-    if (!error) {
       // Decrement product stock counts
       for (const item of selectedProducts) {
         if (item.product.stock_count !== null && item.product.stock_count !== undefined) {
           const newStock = Math.max(0, item.product.stock_count - item.qty)
-          await supabase.from('products')
-            .update({ stock_count: newStock })
-            .eq('id', item.product.id)
+          await updateProductStock(dataconnect, { id: item.product.id, stockCount: newStock })
         }
       }
       setSuccess(true)
+    } catch (err) {
+      console.error(err)
     }
     setProcessing(false)
   }
@@ -144,12 +164,26 @@ export default function Checkout() {
             </button>
             {filteredClients.map(c => (
               <button key={c.id} onClick={async () => {
-              setSelectedClient(c)
-              setStep(2)
-              // Fetch client packages
-              const { data } = await supabase.from('client_packages').select('*').eq('client_id', c.id).eq('status', 'active')
-              setClientPackages(data || [])
-            }}
+                setSelectedClient(c)
+                setStep(2)
+                // Fetch client packages
+                try {
+                  const { data } = await getClientDetail(dataconnect, { id: c.id })
+                  const pkgs = (data?.client?.clientPackages_on_client || [])
+                    .filter((p: any) => p.status === 'active')
+                    .map((p: any) => ({
+                      id: p.id,
+                      name: p.name,
+                      total_sessions: p.totalSessions,
+                      used_sessions: p.usedSessions,
+                      price: p.price,
+                      status: p.status
+                    }))
+                  setClientPackages(pkgs)
+                } catch {
+                  setClientPackages([])
+                }
+              }}
                 className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${selectedClient?.id === c.id ? 'bg-brand/10 border border-brand/20' : 'hover:bg-white/5'}`}>
                 <p className="text-sm font-medium text-white">{c.full_name}</p>
                 <p className="text-xs text-gray-500">{c.email}</p>

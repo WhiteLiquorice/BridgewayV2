@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgProfiles, getOrgPosTransactions, updateProfileCommissionRate } from '@bridgeway/database'
 
 function exportCSV(staff, week) {
   const header = 'Staff Member,Commission Rate,Earned (Week),Appts'
@@ -32,26 +33,34 @@ export default function Commissions() {
     if (!profile?.org_id) return
     setLoading(true)
     try {
-      // 1. Get staff
-      const { data: st } = await supabase
-        .from('profiles')
-        .select('id, full_name, commission_rate_percentage')
-        .eq('org_id', profile.org_id)
-        .neq('role', 'patient')
-        .eq('is_active', true)
+      const [profilesRes, txRes] = await Promise.all([
+        getOrgProfiles(dataconnect, { orgId: profile.org_id }),
+        getOrgPosTransactions(dataconnect, { orgId: profile.org_id })
+      ])
 
-      // 2. Get transactions for the last 7 days
+      const staffList = (profilesRes.data?.profiles || [])
+        .filter((p: any) => p.isActive && ['admin', 'manager', 'staff'].includes(p.role))
+        .map((p: any) => ({
+          id: p.id,
+          full_name: p.fullName,
+          commission_rate_percentage: p.commissionRatePercentage ?? 0,
+        }))
+
+      // Filter transactions for the last 7 days locally
       const sevenDaysAgo = new Date()
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      
-      const { data: tx } = await supabase
-        .from('pos_transactions')
-        .select('staff_id, commission_amount, total_cents, created_at')
-        .eq('org_id', profile.org_id)
-        .gte('created_at', sevenDaysAgo.toISOString())
 
-      setStaff(st || [])
-      setTransactions(tx || [])
+      const txList = (txRes.data?.posTransactions || [])
+        .filter((t: any) => new Date(t.createdAt) >= sevenDaysAgo)
+        .map((t: any) => ({
+          staff_id: t.staff?.id,
+          commission_amount: t.commissionAmount,
+          total_cents: t.totalCents,
+          created_at: t.createdAt,
+        }))
+
+      setStaff(staffList)
+      setTransactions(txList)
     } catch (err) {
       console.error(err)
     } finally {
@@ -79,14 +88,15 @@ export default function Commissions() {
 
   async function updateRate() {
     if (!editingId) return
-    const { error } = await supabase
-      .from('profiles')
-      .update({ commission_rate_percentage: newRate })
-      .eq('id', editingId)
-    
-    if (!error) {
+    try {
+      await updateProfileCommissionRate(dataconnect, {
+        id: editingId,
+        commissionRatePercentage: newRate,
+      })
       setStaff(prev => prev.map(s => s.id === editingId ? { ...s, commission_rate_percentage: newRate } : s))
       setEditingId(null)
+    } catch (err) {
+      console.error(err)
     }
   }
 

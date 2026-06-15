@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getClientAppointments, getActiveIntakeTemplates, getIntakeSubmissions, createIntakeSubmission } from '@bridgeway/database'
 
 // ── Field renderer (read/write) ───────────────────────────────────────────────
 function FieldInput({ field, value, onChange }) {
@@ -181,15 +182,20 @@ function FormSubmitter({ form, appointmentId, clientId, onSubmitted }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setSubmitting(true)
-    const { error } = await supabase.from('intake_form_submissions').insert({
-      org_id: org.id,
-      form_id: form.id,
-      client_id: clientId,
-      appointment_id: appointmentId || null,
-      responses,
-    })
-    setSubmitting(false)
-    if (!error) onSubmitted()
+    try {
+      await createIntakeSubmission(dataconnect, {
+        orgId: org.id,
+        formId: form.id,
+        clientId: clientId,
+        appointmentId: appointmentId || null,
+        responses: responses
+      })
+      onSubmitted()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -227,80 +233,69 @@ function FormSubmitter({ form, appointmentId, clientId, onSubmitted }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function IntakeForms() {
-  const { org, user } = useAuth()
-  const [pendingForms, setPendingForms] = useState([]) // { form, appointmentId, clientId }
-  const [completedForms, setCompletedForms] = useState([])
+  const { org, user, clientId } = useAuth()
+  const [pendingForms, setPendingForms] = useState<any[]>([]) // { form, appointmentId, clientId }
+  const [completedForms, setCompletedForms] = useState<any[]>([])
   const [activeFormIdx, setActiveFormIdx] = useState(0)
   const [loading, setLoading] = useState(true)
   const [justSubmitted, setJustSubmitted] = useState(false)
 
   useEffect(() => {
-    if (!org?.id || !user?.id) return
+    if (!org?.id || !clientId) {
+      setLoading(false)
+      return
+    }
     loadForms()
-  }, [org?.id, user?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [org?.id, clientId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadForms() {
+    if (!clientId || !org?.id) { setLoading(false); return }
     setLoading(true)
 
-    // Get client record for this user
-    const { data: clientData } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('org_id', org.id)
-      .eq('user_id', user.id)
-      .single()
+    try {
+      // Get upcoming appointments (next 7 days)
+      const nowMs = Date.now()
+      const oneWeekMs = nowMs + 7 * 24 * 60 * 60 * 1000
+      const apptsRes = await getClientAppointments(dataconnect, { clientId })
+      const appts = (apptsRes.data.appointments || []).filter((a: any) => {
+        const t = new Date(a.scheduledAt).getTime()
+        return (a.status === 'confirmed' || a.status === 'arrived') && t >= nowMs && t <= oneWeekMs
+      })
 
-    const clientId = clientData?.id
-    if (!clientId) { setLoading(false); return }
+      // Get active form templates
+      const templatesRes = await getActiveIntakeTemplates(dataconnect, { orgId: org.id })
+      const templates = templatesRes.data.intakeFormTemplates || []
 
-    // Get upcoming appointments (next 7 days)
-    const now = new Date().toISOString()
-    const week = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    const { data: appts } = await supabase
-      .from('appointments')
-      .select('id')
-      .eq('org_id', org.id)
-      .eq('client_id', clientId)
-      .gte('scheduled_at', now)
-      .lte('scheduled_at', week)
-      .in('status', ['confirmed', 'arrived'])
+      // Get already-submitted forms
+      const submissionsRes = await getIntakeSubmissions(dataconnect, { orgId: org.id, clientId })
+      const submissions = submissionsRes.data.intakeFormSubmissions || []
 
-    // Get active form templates
-    const { data: templates } = await supabase
-      .from('intake_form_templates')
-      .select('id, name, fields')
-      .eq('org_id', org.id)
-      .eq('is_active', true)
+      const submittedKeys = new Set(
+        submissions.map((s: any) => `${s.form?.id}::${s.appointment?.id || ''}`)
+      )
 
-    // Get already-submitted forms
-    const { data: submissions } = await supabase
-      .from('intake_form_submissions')
-      .select('form_id, appointment_id')
-      .eq('org_id', org.id)
-      .eq('client_id', clientId)
-
-    const submittedKeys = new Set(
-      (submissions || []).map(s => `${s.form_id}::${s.appointment_id || ''}`)
-    )
-
-    // Build pending list: one entry per form × appointment combination not yet submitted
-    const pending = []
-    const completed = []
-    for (const tmpl of templates || []) {
-      const apptList = appts?.length ? appts : [{ id: null }]
-      for (const appt of apptList) {
-        const key = `${tmpl.id}::${appt.id || ''}`
-        if (!submittedKeys.has(key)) {
-          pending.push({ form: tmpl, appointmentId: appt.id, clientId })
-        } else {
-          completed.push(tmpl)
+      // Build pending list: one entry per form × appointment combination not yet submitted
+      const pending = []
+      const completed = []
+      for (const tmpl of templates) {
+        const apptList = appts.length ? appts : [{ id: null }]
+        for (const appt of apptList) {
+          const key = `${tmpl.id}::${appt.id || ''}`
+          if (!submittedKeys.has(key)) {
+            pending.push({ form: tmpl, appointmentId: appt.id, clientId })
+          } else {
+            completed.push(tmpl)
+          }
         }
       }
-    }
 
-    setPendingForms(pending)
-    setCompletedForms([...new Map(completed.map(f => [f.id, f])).values()])
-    setLoading(false)
+      setPendingForms(pending)
+      setCompletedForms([...new Map(completed.map(f => [f.id, f])).values()])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   function handleSubmitted() {

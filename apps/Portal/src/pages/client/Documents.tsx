@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getClientDocuments } from '@bridgeway/database'
 
 function FileIcon() {
   return (
@@ -22,16 +23,20 @@ export default function ClientDocuments() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!clientId) return
+    if (!clientId || !profile?.org_id) {
+      setLoading(false)
+      return
+    }
     async function fetchDocs() {
       setLoading(true)
       try {
-        const { data } = await supabase
-          .from('documents')
-          .select('*')
-          .eq('client_id', clientId)
-          .order('uploaded_at', { ascending: false })
-        setDocuments(data || [])
+        const res = await getClientDocuments(dataconnect, { orgId: profile.org_id, clientId })
+        const mapped = (res.data.documents || []).map(d => ({
+          ...d,
+          file_name: d.title,
+          uploaded_at: d.createdAt
+        }))
+        setDocuments(mapped as any)
       } catch {
         // Network error — leave stale data in place, spinner resolves
       } finally {
@@ -39,12 +44,14 @@ export default function ClientDocuments() {
       }
     }
     fetchDocs()
-  }, [clientId])
+  }, [clientId, profile?.org_id])
 
-  async function handleDownload(doc) {
-    const { data, error } = await supabase.storage.from('documents').createSignedUrl(doc.file_path, 3600)
-    if (error) { alert(`Download error: ${error.message}`); return }
-    window.open(data.signedUrl, '_blank')
+  async function handleDownload(doc: any) {
+    if (doc.fileUrl) {
+      window.open(doc.fileUrl, '_blank')
+    } else {
+      alert('Download URL not found.')
+    }
   }
 
   function formatDate(dt) {

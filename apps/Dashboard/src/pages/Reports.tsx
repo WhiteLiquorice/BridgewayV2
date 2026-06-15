@@ -3,7 +3,8 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getAppointmentsForReports, getOrgProfiles, getClassRegistrationsForReports, getClassesForReports, getClientsForReports } from '@bridgeway/database'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const TABS = [
@@ -70,12 +71,14 @@ function RevenueTab({ orgId }) {
       sixAgo.setDate(1)
       sixAgo.setHours(0, 0, 0, 0)
 
-      const { data: appts } = await supabase
-        .from('appointments')
-        .select('scheduled_at, amount, status, services(name), staff_id')
-        .eq('org_id', orgId)
-        .neq('status', 'cancelled')
-        .gte('scheduled_at', sixAgo.toISOString())
+      const { data } = await getAppointmentsForReports(dataconnect, { orgId, since: sixAgo.toISOString() })
+      const appts = (data?.appointments || []).map((a: any) => ({
+        scheduled_at: a.scheduledAt,
+        amount: a.amount,
+        status: a.status,
+        services: a.service ? { name: a.service.name } : null,
+        staff_id: a.staff?.id
+      }))
 
       const rows = appts || []
 
@@ -104,8 +107,10 @@ function RevenueTab({ orgId }) {
       const staffIds = [...new Set(rows.filter(a => a.staff_id).map(a => a.staff_id))]
       let staffMap = {}
       if (staffIds.length > 0) {
-        const { data: staffData } = await supabase.from('profiles').select('id, full_name').in('id', staffIds)
-        if (staffData) staffData.forEach(s => { staffMap[s.id] = s.full_name })
+        const { data: staffData } = await getOrgProfiles(dataconnect, { orgId })
+        if (staffData?.profiles) {
+          staffData.profiles.forEach(s => { staffMap[s.id] = s.fullName })
+        }
       }
       const staffAgg = {}
       rows.forEach(a => {
@@ -203,22 +208,32 @@ function AttendanceTab({ orgId }) {
       sixAgo.setHours(0, 0, 0, 0)
 
       const [regRes, classRes, apptRes] = await Promise.all([
-        supabase.from('class_registrations')
-          .select('created_at, class_sessions(class_templates(name, capacity))')
-          .eq('org_id', orgId)
-          .gte('created_at', sixAgo.toISOString()),
-        supabase.from('class_sessions')
-          .select('id, class_templates(name, capacity)')
-          .eq('org_id', orgId),
-        supabase.from('appointments')
-          .select('status')
-          .eq('org_id', orgId)
-          .gte('scheduled_at', sixAgo.toISOString()),
+        getClassRegistrationsForReports(dataconnect, { orgId, since: sixAgo.toISOString() }),
+        getClassesForReports(dataconnect, { orgId }),
+        getAppointmentsForReports(dataconnect, { orgId, since: sixAgo.toISOString() }),
       ])
 
-      const regs = regRes.data || []
-      const sessions = classRes.data || []
-      const appts = apptRes.data || []
+      const regs = (regRes.data?.classRegistrations || []).map((r: any) => ({
+        created_at: r.createdAt,
+        class_sessions: r.classEntity ? {
+          class_templates: {
+            name: r.classEntity.name,
+            capacity: r.classEntity.capacity
+          }
+        } : null
+      }))
+
+      const sessions = (classRes.data?.classes || []).map((c: any) => ({
+        id: c.id,
+        class_templates: {
+          name: c.name,
+          capacity: c.capacity
+        }
+      }))
+
+      const appts = (apptRes.data?.appointments || []).map((a: any) => ({
+        status: a.status
+      }))
 
       // Monthly registrations
       const months = getLast6Months()
@@ -329,17 +344,25 @@ function ClientsTab({ orgId }) {
       sixAgo.setHours(0, 0, 0, 0)
 
       const [clientRes, apptRes] = await Promise.all([
-        supabase.from('clients')
-          .select('id, name, phone, email, created_at')
-          .eq('org_id', orgId),
-        supabase.from('appointments')
-          .select('client_id, scheduled_at, status')
-          .eq('org_id', orgId)
-          .neq('status', 'cancelled'),
+        getClientsForReports(dataconnect, { orgId }),
+        getAppointmentsForReports(dataconnect, { orgId, since: '2020-01-01T00:00:00Z' })
       ])
 
-      const clients = clientRes.data || []
-      const appts = apptRes.data || []
+      const clients = (clientRes.data?.clients || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        created_at: c.createdAt
+      }))
+
+      const appts = (apptRes.data?.appointments || [])
+        .filter((a: any) => a.status !== 'cancelled')
+        .map((a: any) => ({
+          client_id: a.client?.id || null,
+          scheduled_at: a.scheduledAt,
+          status: a.status
+        }))
 
       // New clients per month
       const months = getLast6Months()

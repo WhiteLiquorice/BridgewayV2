@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgPackageTemplates, createPackageTemplate, updatePackageTemplate, togglePackageTemplateActive, getActiveServices } from '@bridgeway/database'
 
 function formatPrice(price) {
   return `$${Number(price ?? 0).toFixed(2)}`
@@ -35,22 +36,21 @@ export default function Memberships() {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('package_templates')
-        .select('*')
-        .eq('org_id', profile.org_id)
-        .order('created_at', { ascending: false })
-      if (err) throw err
-      setTemplates(data || [])
+      const res = await getOrgPackageTemplates(dataconnect, { orgId: profile.org_id })
+      const mapped = (res.data.packageTemplates || []).map(t => ({
+        ...t,
+        session_count: t.sessionCount,
+        expiry_days: t.expiryDays,
+        billing_interval: t.billingInterval,
+        is_active: t.isActive,
+        service_id: t.service?.id || null
+      }))
+      setTemplates(mapped as any)
       
-      const { data: svc } = await supabase
-        .from('services')
-        .select('id, name')
-        .eq('org_id', profile.org_id)
-        .eq('is_active', true)
-      setServices(svc || [])
-    } catch (err) {
-      setError(err.message)
+      const svcRes = await getActiveServices(dataconnect, { orgId: profile.org_id })
+      setServices((svcRes.data.services || []) as any)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load templates.')
     } finally {
       setLoading(false)
     }
@@ -65,27 +65,22 @@ export default function Memberships() {
     setAddError(null)
     setAdding(true)
     try {
-      const payload = {
-        org_id: profile.org_id,
+      await createPackageTemplate(dataconnect, {
+        orgId: profile.org_id,
         name: form.name.trim(),
         type: form.type,
-        service_id: form.service_id || null,
+        serviceId: form.service_id || null,
+        sessionCount: form.type === 'sessions' ? (parseInt(form.session_count as any) || 10) : null,
         price: parseFloat(form.price),
-        is_active: true,
-      }
-      if (form.type === 'sessions') {
-        payload.session_count = parseInt(form.session_count) || 10
-        payload.expiry_days = parseInt(form.expiry_days) || null
-      } else {
-        payload.billing_interval = form.billing_interval
-      }
-      const { error: err } = await supabase.from('package_templates').insert(payload)
-      if (err) throw err
+        billingInterval: form.type === 'membership' ? form.billing_interval : null,
+        expiryDays: form.type === 'sessions' ? (parseInt(form.expiry_days as any) || null) : null,
+        isActive: true
+      })
       setForm({ name: '', type: 'sessions', session_count: 10, price: '', billing_interval: 'monthly', expiry_days: 90, service_id: '' })
       setShowAdd(false)
       loadTemplates()
-    } catch (err) {
-      setAddError(err.message)
+    } catch (err: any) {
+      setAddError(err.message || 'Failed to add template.')
     } finally {
       setAdding(false)
     }
@@ -99,31 +94,34 @@ export default function Memberships() {
   async function saveEdit() {
     setEditSaving(true)
     try {
-      const { error: err } = await supabase.from('package_templates')
-        .update({
-          name: editForm.name,
-          type: editForm.type,
-          session_count: editForm.type === 'sessions' ? editForm.session_count : null,
-          price: parseFloat(editForm.price),
-          service_id: editForm.service_id || null,
-          billing_interval: editForm.type === 'membership' ? editForm.billing_interval : null,
-          expiry_days: editForm.type === 'sessions' ? editForm.expiry_days : null,
-          is_active: editForm.is_active,
-        })
-        .eq('id', editId)
-      if (err) throw err
+      const editFormAny = editForm as any
+      await updatePackageTemplate(dataconnect, {
+        id: editId,
+        name: editFormAny.name,
+        type: editFormAny.type,
+        serviceId: editFormAny.service_id || null,
+        sessionCount: editFormAny.type === 'sessions' ? (parseInt(editFormAny.session_count) || null) : null,
+        price: parseFloat(editFormAny.price),
+        billingInterval: editFormAny.type === 'membership' ? editFormAny.billing_interval : null,
+        expiryDays: editFormAny.type === 'sessions' ? (parseInt(editFormAny.expiry_days) || null) : null,
+        isActive: editFormAny.is_active
+      })
       setEditId(null)
       loadTemplates()
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      console.error(err)
+    } finally {
       setEditSaving(false)
     }
   }
 
   async function toggleActive(row) {
-    await supabase.from('package_templates')
-      .update({ is_active: !row.is_active })
-      .eq('id', row.id)
-    loadTemplates()
+    try {
+      await togglePackageTemplateActive(dataconnect, { id: row.id, isActive: !row.is_active })
+      loadTemplates()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   if (loading) return (

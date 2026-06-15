@@ -15,6 +15,7 @@ query GetUserProfile @auth(level: USER) {
       status
       subscriptionTier
       onboardingComplete
+      patientCheckinEnabled
     }
   }
 }
@@ -194,7 +195,7 @@ query GetAdminDashboardStats($orgId: UUID!, $thirtyDaysAgo: Timestamp!, $sevenDa
 }
 
 # Booking App Data Queries
-query GetBookingPageData($slug: String!) @auth(level: NO_ACCESS) {
+query GetBookingPageData($slug: String!) @auth(level: PUBLIC) {
   orgs(where: { slug: { eq: $slug }, subscriptionTier: { eq: "base" } }) {
     id
     name
@@ -221,7 +222,7 @@ query GetBookingPageData($slug: String!) @auth(level: NO_ACCESS) {
   }
 }
 
-query GetAppointmentsForDay($orgId: UUID!, $startOfDay: Timestamp!, $endOfDay: Timestamp!) @auth(level: NO_ACCESS) {
+query GetAppointmentsForDay($orgId: UUID!, $startOfDay: Timestamp!, $endOfDay: Timestamp!) @auth(level: USER) {
   appointments(
     where: { 
       orgId: { eq: $orgId }, 
@@ -236,7 +237,7 @@ query GetAppointmentsForDay($orgId: UUID!, $startOfDay: Timestamp!, $endOfDay: T
   }
 }
 
-query GetBookingById($id: UUID!) @auth(level: NO_ACCESS) {
+query GetBookingById($id: UUID!) @auth(level: USER) {
   booking(id: $id) {
     id
     status
@@ -252,6 +253,7 @@ query GetBookingById($id: UUID!) @auth(level: NO_ACCESS) {
 mutation CreateBooking(
   $orgId: UUID!, 
   $serviceId: UUID, 
+  $slotId: UUID,
   $name: String!, 
   $email: String, 
   $phone: String, 
@@ -260,10 +262,11 @@ mutation CreateBooking(
   $notes: String, 
   $status: String!, 
   $paymentStatus: String
-) @auth(level: NO_ACCESS) {
+) @auth(level: PUBLIC) {
   booking_insert(data: {
     orgId: $orgId,
     serviceId: $serviceId,
+    slotId: $slotId,
     name: $name,
     email: $email,
     phone: $phone,
@@ -284,7 +287,7 @@ mutation UpdateBooking(
   $reminder2hSent: Boolean,
   $googleEventId: String,
   $googleEventLink: String
-) @auth(level: NO_ACCESS) {
+) @auth(level: USER) {
   booking_update(id: $id, data: {
     status: $status,
     paymentStatus: $paymentStatus,
@@ -345,7 +348,7 @@ mutation UpdateOrgGoogleCalendar(
 
 # New mutations and queries for migrating Booking & Dashboard apps off Supabase
 
-query GetClientByEmail($orgId: UUID!, $email: String!) @auth(level: NO_ACCESS) {
+query GetClientByEmail($orgId: UUID!, $email: String!) @auth(level: USER) {
   clients(where: { orgId: { eq: $orgId }, email: { eq: $email } }) {
     id
     name
@@ -354,7 +357,7 @@ query GetClientByEmail($orgId: UUID!, $email: String!) @auth(level: NO_ACCESS) {
   }
 }
 
-query GetClientByPhone($orgId: UUID!, $phone: String!) @auth(level: NO_ACCESS) {
+query GetClientByPhone($orgId: UUID!, $phone: String!) @auth(level: USER) {
   clients(where: { orgId: { eq: $orgId }, phone: { eq: $phone } }) {
     id
     name
@@ -363,7 +366,7 @@ query GetClientByPhone($orgId: UUID!, $phone: String!) @auth(level: NO_ACCESS) {
   }
 }
 
-query GetClientAppointments($clientId: UUID!) @auth(level: NO_ACCESS) {
+query GetClientAppointments($clientId: UUID!) @auth(level: USER) {
   appointments(where: { clientId: { eq: $clientId } }, orderBy: [{ scheduledAt: DESC }]) {
     id
     scheduledAt
@@ -377,7 +380,7 @@ query GetClientAppointments($clientId: UUID!) @auth(level: NO_ACCESS) {
   }
 }
 
-mutation UpdateAppointmentStatus($id: UUID!, $status: String!) @auth(level: NO_ACCESS) {
+mutation UpdateAppointmentStatus($id: UUID!, $status: String!) @auth(level: USER) {
   appointment_update(id: $id, data: { status: $status })
 }
 
@@ -389,6 +392,7 @@ query GetOrgAppointments($orgId: UUID!) @auth(level: USER) {
     amount
     notes
     durationMinutes
+    cancellationReason
     client {
       id
       name
@@ -401,7 +405,7 @@ query GetOrgAppointments($orgId: UUID!) @auth(level: USER) {
 
 mutation CreateAppointment(
   $orgId: UUID!,
-  $clientId: UUID!,
+  $clientId: UUID,
   $serviceId: UUID,
   $staffId: UUID,
   $scheduledAt: Timestamp!,
@@ -409,7 +413,7 @@ mutation CreateAppointment(
   $status: String!,
   $amount: Float!,
   $notes: String
-) @auth(level: NO_ACCESS) {
+) @auth(level: USER) {
   appointment_insert(data: {
     orgId: $orgId,
     clientId: $clientId,
@@ -429,6 +433,7 @@ query GetActiveServices($orgId: UUID!) @auth(level: USER) {
     name
     price
     durationMinutes
+    description
   }
 }
 
@@ -437,6 +442,7 @@ query SearchClients($orgId: UUID!, $query: String!) @auth(level: USER) {
     id
     name
     email
+    phone
   }
 }
 
@@ -527,7 +533,7 @@ mutation CreateClient(
   $dateOfBirth: Date,
   $address: String,
   $notes: String
-) @auth(level: NO_ACCESS) {
+) @auth(level: PUBLIC) {
   client_insert(data: {
     orgId: $orgId,
     name: $name,
@@ -558,7 +564,7 @@ mutation UpdateClient(
   })
 }
 
-query GetOrgQueue($orgId: UUID!) @auth(level: NO_ACCESS) {
+query GetOrgQueue($orgId: UUID!) @auth(level: PUBLIC) {
   queueEntries(where: { orgId: { eq: $orgId } }, orderBy: [{ position: ASC }]) {
     id
     clientName
@@ -586,13 +592,15 @@ query GetOrgQueue($orgId: UUID!) @auth(level: NO_ACCESS) {
 mutation CreateQueueEntry(
   $orgId: UUID!,
   $clientName: String!,
+  $clientId: UUID,
   $serviceId: UUID,
   $status: String!,
   $position: Int!
-) @auth(level: NO_ACCESS) {
+) @auth(level: PUBLIC) {
   queueEntry_insert(data: {
     orgId: $orgId,
     clientName: $clientName,
+    clientId: $clientId,
     serviceId: $serviceId,
     status: $status,
     position: $position
@@ -618,7 +626,7 @@ mutation DeleteQueueEntry($id: UUID!) @auth(level: USER) {
   queueEntry_delete(id: $id)
 }
 
-query GetUpcomingOrgAppointments($orgId: UUID!) @auth(level: NO_ACCESS) {
+query GetUpcomingOrgAppointments($orgId: UUID!) @auth(level: PUBLIC) {
   appointments(where: { orgId: { eq: $orgId }, status: { eq: "confirmed" } }, orderBy: [{ scheduledAt: ASC }]) {
     id
     scheduledAt
@@ -638,7 +646,7 @@ query GetUpcomingOrgAppointments($orgId: UUID!) @auth(level: NO_ACCESS) {
   }
 }
 
-query GetSlotsForDay($orgId: UUID!, $start: Timestamp!, $end: Timestamp!) @auth(level: NO_ACCESS) {
+query GetSlotsForDay($orgId: UUID!, $start: Timestamp!, $end: Timestamp!) @auth(level: PUBLIC) {
   slots(where: { orgId: { eq: $orgId }, startTime: { ge: $start, le: $end } }) {
     id
     startTime
@@ -714,6 +722,895 @@ query GetInAppNotifications($orgId: UUID!) @auth(level: USER) {
 mutation MarkNotificationRead($id: UUID!) @auth(level: USER) {
   inAppNotification_update(id: $id, data: { isRead: true })
 }
+
+# --- Phase 2 & 3 Additions ---
+
+# POS & Products
+query GetPosProducts($orgId: UUID!) @auth(level: USER) {
+  products(where: { orgId: { eq: $orgId }, isActive: { eq: true } }, orderBy: [{ name: ASC }]) {
+    id
+    name
+    priceCents
+    stockCount
+  }
+}
+
+query GetProductsForInventory($orgId: UUID!) @auth(level: USER) {
+  products(where: { orgId: { eq: $orgId } }, orderBy: [{ name: ASC }]) {
+    id
+    name
+    priceCents
+    stockCount
+    lowStockThreshold
+    isActive
+    createdAt
+  }
+}
+
+mutation CreateProduct(
+  $orgId: UUID!,
+  $name: String!,
+  $priceCents: Int!,
+  $stockCount: Int,
+  $lowStockThreshold: Int,
+  $isActive: Boolean!
+) @auth(level: USER) {
+  product_insert(data: {
+    orgId: $orgId,
+    name: $name,
+    priceCents: $priceCents,
+    stockCount: $stockCount,
+    lowStockThreshold: $lowStockThreshold,
+    isActive: $isActive
+  })
+}
+
+mutation UpdateProduct(
+  $id: UUID!,
+  $name: String!,
+  $priceCents: Int!,
+  $stockCount: Int,
+  $lowStockThreshold: Int,
+  $isActive: Boolean!
+) @auth(level: USER) {
+  product_update(id: $id, data: {
+    name: $name,
+    priceCents: $priceCents,
+    stockCount: $stockCount,
+    lowStockThreshold: $lowStockThreshold,
+    isActive: $isActive
+  })
+}
+
+mutation UpdateProductStock($id: UUID!, $stockCount: Int!) @auth(level: USER) {
+  product_update(id: $id, data: { stockCount: $stockCount })
+}
+
+mutation CreatePosTransaction(
+  $orgId: UUID!,
+  $clientId: UUID,
+  $staffId: UUID,
+  $items: Any!,
+  $tipCents: Int!,
+  $totalCents: Int!,
+  $commissionAmount: Float!,
+  $status: String!
+) @auth(level: USER) {
+  posTransaction_insert(data: {
+    orgId: $orgId,
+    clientId: $clientId,
+    staffId: $staffId,
+    items: $items,
+    tipCents: $tipCents,
+    totalCents: $totalCents,
+    commissionAmount: $commissionAmount,
+    status: $status
+  })
+}
+
+# Staff Schedule
+query GetStaffShifts($orgId: UUID!, $start: Date!, $end: Date!) @auth(level: USER) {
+  staffShifts(
+    where: { 
+      orgId: { eq: $orgId }, 
+      shiftDate: { ge: $start, le: $end } 
+    }, 
+    orderBy: [{ startTime: ASC }]
+  ) {
+    id
+    shiftDate
+    startTime
+    endTime
+    notes
+    staff {
+      id
+      fullName
+    }
+  }
+}
+
+mutation CreateStaffShift(
+  $orgId: UUID!,
+  $staffId: UUID!,
+  $shiftDate: Date!,
+  $startTime: String!,
+  $endTime: String!,
+  $notes: String
+) @auth(level: USER) {
+  staffShift_insert(data: {
+    orgId: $orgId,
+    staffId: $staffId,
+    shiftDate: $shiftDate,
+    startTime: $startTime,
+    endTime: $endTime,
+    notes: $notes
+  })
+}
+
+mutation DeleteStaffShift($id: UUID!) @auth(level: USER) {
+  staffShift_delete(id: $id)
+}
+
+# Availability & Slots
+query GetUpcomingSlots($orgId: UUID!, $now: Timestamp!) @auth(level: USER) {
+  slots(where: { orgId: { eq: $orgId }, startTime: { ge: $now } }, orderBy: [{ startTime: ASC }], limit: 50) {
+    id
+    startTime
+    endTime
+    status
+    staff {
+      id
+      fullName
+    }
+  }
+}
+
+query GetAvailableSlotsForBooking($orgId: UUID!, $now: Timestamp!) @auth(level: PUBLIC) {
+  slots(where: { orgId: { eq: $orgId }, status: { eq: "available" }, startTime: { ge: $now } }, orderBy: [{ startTime: ASC }], limit: 60) {
+    id
+    startTime
+    endTime
+    status
+    staff {
+      id
+      fullName
+    }
+  }
+}
+
+mutation CreateSlot($orgId: UUID!, $startTime: Timestamp!, $endTime: Timestamp!, $status: String!, $staffId: UUID) @auth(level: USER) {
+  slot_insert(data: {
+    orgId: $orgId,
+    startTime: $startTime,
+    endTime: $endTime,
+    status: $status,
+    staffId: $staffId
+  })
+}
+
+mutation UpdateSlotStatus($id: UUID!, $status: String!) @auth(level: USER) {
+  slot_update(id: $id, data: { status: $status })
+}
+
+mutation DeleteSlot($id: UUID!) @auth(level: USER) {
+  slot_delete(id: $id)
+}
+
+# Classes
+query GetClasses($orgId: UUID!) @auth(level: USER) {
+  classes(where: { orgId: { eq: $orgId } }, orderBy: [{ dayOfWeek: ASC }, { startTime: ASC }]) {
+    id
+    name
+    description
+    dayOfWeek
+    startTime
+    durationMinutes
+    capacity
+    location
+    isActive
+    instructor {
+      id
+      fullName
+    }
+  }
+}
+
+query GetActiveClassesForBooking($orgId: UUID!) @auth(level: PUBLIC) {
+  classes(where: { orgId: { eq: $orgId }, isActive: { eq: true } }, orderBy: [{ dayOfWeek: ASC }, { startTime: ASC }]) {
+    id
+    name
+    description
+    dayOfWeek
+    startTime
+    durationMinutes
+    capacity
+    location
+    instructor {
+      id
+      fullName
+    }
+  }
+}
+
+mutation CreateClass(
+  $orgId: UUID!,
+  $name: String!,
+  $description: String,
+  $instructorId: UUID,
+  $dayOfWeek: Int!,
+  $startTime: String!,
+  $durationMinutes: Int!,
+  $capacity: Int!,
+  $location: String
+) @auth(level: USER) {
+  class_insert(data: {
+    orgId: $orgId,
+    name: $name,
+    description: $description,
+    instructorId: $instructorId,
+    dayOfWeek: $dayOfWeek,
+    startTime: $startTime,
+    durationMinutes: $durationMinutes,
+    capacity: $capacity,
+    location: $location,
+    isActive: true
+  })
+}
+
+mutation UpdateClass(
+  $id: UUID!,
+  $name: String!,
+  $description: String,
+  $instructorId: UUID,
+  $dayOfWeek: Int!,
+  $startTime: String!,
+  $durationMinutes: Int!,
+  $capacity: Int!,
+  $location: String
+) @auth(level: USER) {
+  class_update(id: $id, data: {
+    name: $name,
+    description: $description,
+    instructorId: $instructorId,
+    dayOfWeek: $dayOfWeek,
+    startTime: $startTime,
+    durationMinutes: $durationMinutes,
+    capacity: $capacity,
+    location: $location
+  })
+}
+
+mutation UpdateClassActiveStatus($id: UUID!, $isActive: Boolean!) @auth(level: USER) {
+  class_update(id: $id, data: { isActive: $isActive })
+}
+
+query GetClassRegistrationsForReports($orgId: UUID!, $since: Timestamp!) @auth(level: USER) {
+  classRegistrations(where: { orgId: { eq: $orgId }, createdAt: { ge: $since } }) {
+    createdAt
+    classEntity {
+      name
+      capacity
+    }
+  }
+}
+
+query GetClassesForReports($orgId: UUID!) @auth(level: USER) {
+  classes(where: { orgId: { eq: $orgId } }) {
+    id
+    name
+    capacity
+  }
+}
+
+query GetExistingRegistration($classId: UUID!, $clientId: UUID!, $classDate: Date!) @auth(level: PUBLIC) {
+  classRegistrations(where: { classEntityId: { eq: $classId }, clientId: { eq: $clientId }, classDate: { eq: $classDate } }) {
+    id
+    status
+  }
+}
+
+query GetClassRegistrationsCount($classId: UUID!, $classDate: Date!) @auth(level: PUBLIC) {
+  classRegistrations(where: { classEntityId: { eq: $classId }, classDate: { eq: $classDate }, status: { eq: "registered" } }) {
+    id
+  }
+}
+
+mutation CreateClassRegistration(
+  $orgId: UUID!,
+  $classId: UUID!,
+  $clientId: UUID!,
+  $classDate: Date!,
+  $status: String!
+) @auth(level: PUBLIC) {
+  classRegistration_insert(data: {
+    orgId: $orgId,
+    classEntityId: $classId,
+    clientId: $clientId,
+    classDate: $classDate,
+    status: $status
+  })
+}
+
+# Widget Config
+query GetWidgetConfig($userId: String!) @auth(level: USER) {
+  widgetConfigs(where: { userId: { eq: $userId } }) {
+    config
+  }
+}
+
+mutation UpsertWidgetConfig($userId: String!, $orgId: UUID!, $config: Any!) @auth(level: USER) {
+  widgetConfig_upsert(data: {
+    userId: $userId,
+    orgId: $orgId,
+    config: $config
+  })
+}
+
+# Reports & Revenue
+query GetAppointmentsForReports($orgId: UUID!, $since: Timestamp!) @auth(level: USER) {
+  appointments(where: { orgId: { eq: $orgId }, scheduledAt: { ge: $since } }) {
+    id
+    scheduledAt
+    status
+    amount
+    client {
+      id
+    }
+    service {
+      id
+      name
+    }
+    staff {
+      id
+      fullName
+    }
+  }
+}
+
+query GetClientsForReports($orgId: UUID!) @auth(level: USER) {
+  clients(where: { orgId: { eq: $orgId } }) {
+    id
+    name
+    email
+    phone
+    createdAt
+  }
+}
+
+# Client Portal / Profile / Intake
+mutation UpdateProfileInfo($id: UUID!, $fullName: String!, $email: String!, $phone: String!) @auth(level: USER) {
+  profile_update(key: { id: $id }, data: { fullName: $fullName, email: $email, phone: $phone })
+}
+
+query GetActiveIntakeTemplates($orgId: UUID!) @auth(level: PUBLIC) {
+  intakeFormTemplates(where: { orgId: { eq: $orgId }, isActive: { eq: true } }) {
+    id
+    name
+    fields
+  }
+}
+
+query GetIntakeSubmissions($orgId: UUID!, $clientId: UUID!) @auth(level: USER) {
+  intakeFormSubmissions(where: { orgId: { eq: $orgId }, clientId: { eq: $clientId } }) {
+    form {
+      id
+    }
+    appointment {
+      id
+    }
+  }
+}
+
+mutation CreateIntakeSubmission(
+  $orgId: UUID!,
+  $formId: UUID!,
+  $clientId: UUID!,
+  $appointmentId: UUID,
+  $responses: Any!
+) @auth(level: PUBLIC) {
+  intakeFormSubmission_insert(data: {
+    orgId: $orgId,
+    formId: $formId,
+    clientId: $clientId,
+    appointmentId: $appointmentId,
+    responses: $responses
+  })
+}
+
+query GetClientDocuments($orgId: UUID!, $clientId: UUID!) @auth(level: USER) {
+  documents(where: { orgId: { eq: $orgId }, clientId: { eq: $clientId } }, orderBy: [{ createdAt: DESC }]) {
+    id
+    title
+    fileUrl
+    createdAt
+  }
+}
+
+mutation UpdateClientPackageSessions($id: UUID!, $usedSessions: Int!) @auth(level: USER) {
+  clientPackage_update(id: $id, data: { usedSessions: $usedSessions })
+}
+
+# Announcements
+query GetAnnouncements($orgId: UUID!) @auth(level: USER) {
+  announcements(where: { orgId: { eq: $orgId } }, orderBy: [{ postedAt: DESC }], limit: 20) {
+    id
+    message
+    postedAt
+    postedBy {
+      id
+      fullName
+    }
+  }
+}
+
+mutation CreateAnnouncement($orgId: UUID!, $message: String!, $postedById: UUID!) @auth(level: USER) {
+  announcement_insert(data: {
+    orgId: $orgId,
+    message: $message,
+    postedById: $postedById
+  })
+}
+
+mutation DeleteAnnouncement($id: UUID!) @auth(level: USER) {
+  announcement_delete(id: $id)
+}
+
+# Class Attendance / Schedule
+query GetClassRegistrationsForAttendance($orgId: UUID!, $classId: UUID!, $classDate: Date!) @auth(level: USER) {
+  classRegistrations(
+    where: { orgId: { eq: $orgId }, classEntityId: { eq: $classId }, classDate: { eq: $classDate } }
+  ) {
+    id
+    status
+    createdAt
+    client {
+      id
+      name
+      email
+      phone
+    }
+  }
+}
+
+mutation UpdateClassRegistrationStatus($id: UUID!, $status: String!) @auth(level: USER) {
+  classRegistration_update(id: $id, data: { status: $status })
+}
+
+# Client Retention
+query GetClientsForRetention($orgId: UUID!) @auth(level: USER) {
+  clients(where: { orgId: { eq: $orgId } }) {
+    id
+    name
+    email
+    phone
+    dateOfBirth
+  }
+}
+
+query GetCompletedAppointmentsForRetention($orgId: UUID!) @auth(level: USER) {
+  appointments(
+    where: { orgId: { eq: $orgId }, status: { eq: "completed" } }
+    orderBy: [{ scheduledAt: DESC }]
+  ) {
+    id
+    scheduledAt
+    client {
+      id
+    }
+  }
+}
+
+query GetOrgClientPackages($orgId: UUID!) @auth(level: USER) {
+  clientPackages(where: { orgId: { eq: $orgId } }, orderBy: [{ createdAt: DESC }]) {
+    id
+    name
+    totalSessions
+    usedSessions
+    price
+    purchasedAt
+    expiresAt
+    status
+    client {
+      id
+      name
+      email
+    }
+  }
+}
+
+# The Floor / Spatial layout
+query GetFloorLayout($orgId: UUID!) @auth(level: USER) {
+  floorZones(where: { orgId: { eq: $orgId } }, orderBy: [{ name: ASC }]) {
+    id
+    name
+    capacity
+  }
+  seatAssignments(where: { orgId: { eq: $orgId }, clearedAt: { eq: null } }) {
+    id
+    zone {
+      id
+    }
+    zoneName
+    queueEntry {
+      id
+    }
+    clientName
+    assignedAt
+  }
+}
+
+mutation AssignSeat(
+  $orgId: UUID!,
+  $zoneId: UUID!,
+  $zoneName: String!,
+  $queueEntryId: UUID!,
+  $clientName: String!
+) @auth(level: USER) {
+  seatAssignment_insert(data: {
+    orgId: $orgId,
+    zoneId: $zoneId,
+    zoneName: $zoneName,
+    queueEntryId: $queueEntryId,
+    clientName: $clientName
+  })
+}
+
+mutation ClearSeat($id: UUID!, $clearedAt: Timestamp!) @auth(level: USER) {
+  seatAssignment_update(id: $id, data: { clearedAt: $clearedAt })
+}
+
+query GetTodayFloorAppointments($orgId: UUID!, $todayStart: Timestamp!, $todayEnd: Timestamp!) @auth(level: USER) {
+  appointments(
+    where: { 
+      orgId: { eq: $orgId }, 
+      status: { in: ["confirmed", "arrived", "with_provider"] },
+      scheduledAt: { ge: $todayStart, le: $todayEnd }
+    },
+    orderBy: [{ scheduledAt: ASC }]
+  ) {
+    id
+    scheduledAt
+    status
+    client {
+      id
+      name
+    }
+    service {
+      id
+      name
+    }
+    staff {
+      id
+      fullName
+    }
+  }
+}
+
+query GetUnconfirmedAppointments($orgId: UUID!, $now: Timestamp!, $in48h: Timestamp!) @auth(level: USER) {
+  appointments(
+    where: {
+      orgId: { eq: $orgId },
+      status: { eq: "pending" },
+      scheduledAt: { ge: $now, le: $in48h }
+    },
+    orderBy: [{ scheduledAt: ASC }]
+  ) {
+    id
+    scheduledAt
+    client {
+      id
+      name
+      email
+      phone
+    }
+    service {
+      id
+      name
+    }
+  }
+}
+
+query GetPendingOrgBookings($orgId: UUID!) @auth(level: USER) {
+  bookings(where: { orgId: { eq: $orgId }, status: { eq: "pending" } }, orderBy: [{ createdAt: ASC }], limit: 10) {
+    id
+    preferredDate
+    preferredTime
+    notes
+    createdAt
+    service {
+      id
+      name
+      durationMinutes
+    }
+    slot {
+      id
+      startTime
+    }
+    name
+    email
+    phone
+  }
+}
+
+query GetOrgWaitlist($orgId: UUID!) @auth(level: USER) {
+  classRegistrations(where: { orgId: { eq: $orgId }, status: { eq: "waitlisted" } }, orderBy: [{ createdAt: ASC }]) {
+    id
+    classDate
+    status
+    createdAt
+    client {
+      id
+      name
+      email
+      phone
+    }
+    classEntity {
+      id
+      name
+      dayOfWeek
+      startTime
+      capacity
+    }
+  }
+}
+
+query GetOrgActivityLogs($orgId: UUID!, $limit: Int!, $offset: Int!) @auth(level: USER) {
+  activityLogs(where: { orgId: { eq: $orgId } }, orderBy: [{ createdAt: DESC }], limit: $limit, offset: $offset) {
+    id
+    userId
+    action
+    metadata
+    createdAt
+  }
+}
+
+query GetOrgPosTransactions($orgId: UUID!) @auth(level: USER) {
+  posTransactions(where: { orgId: { eq: $orgId } }, orderBy: [{ createdAt: DESC }]) {
+    id
+    tipCents
+    totalCents
+    commissionAmount
+    status
+    createdAt
+    staff {
+      id
+    }
+  }
+}
+
+query GetOrgById($id: UUID!) @auth(level: USER) {
+  org(id: $id) {
+    id
+    stripePublishableKey
+  }
+}
+
+mutation UpdateOrgStripeCredentials(
+  $orgId: UUID!,
+  $stripePublishableKey: String,
+  $stripeSecretKey: String,
+  $paymentRequired: Boolean
+) @auth(level: USER) {
+  org_update(id: $orgId, data: { stripePublishableKey: $stripePublishableKey })
+  orgSetting_upsert(data: {
+    orgId: $orgId,
+    stripeSecretKey: $stripeSecretKey,
+    paymentRequired: $paymentRequired
+  })
+}
+
+mutation UpdateProfileCommissionRate($id: UUID!, $commissionRatePercentage: Int!) @auth(level: USER) {
+  profile_update(key: { id: $id }, data: { commissionRatePercentage: $commissionRatePercentage })
+}
+
+# Intake Templates Admin
+query GetOrgIntakeTemplates($orgId: UUID!) @auth(level: USER) {
+  intakeFormTemplates(where: { orgId: { eq: $orgId } }, orderBy: [{ createdAt: DESC }]) {
+    id
+    name
+    fields
+    isActive
+    createdAt
+  }
+}
+
+mutation CreateIntakeTemplate($orgId: UUID!, $name: String!, $fields: Any!, $isActive: Boolean!) @auth(level: USER) {
+  intakeFormTemplate_insert(data: {
+    orgId: $orgId,
+    name: $name,
+    fields: $fields,
+    isActive: $isActive
+  })
+}
+
+mutation UpdateIntakeTemplate($id: UUID!, $name: String!, $fields: Any!, $isActive: Boolean!) @auth(level: USER) {
+  intakeFormTemplate_update(id: $id, data: {
+    name: $name,
+    fields: $fields,
+    isActive: $isActive
+  })
+}
+
+mutation DeleteIntakeTemplate($id: UUID!) @auth(level: USER) {
+  intakeFormTemplate_delete(id: $id)
+}
+
+# Service Catalog
+query GetOrgServices($orgId: UUID!) @auth(level: USER) {
+  services(where: { orgId: { eq: $orgId } }, orderBy: [{ name: ASC }]) {
+    id
+    name
+    durationMinutes
+    price
+    isArchived
+  }
+}
+
+mutation UpdateService($id: UUID!, $name: String!, $durationMinutes: Int!, $price: Float!) @auth(level: USER) {
+  service_update(id: $id, data: { name: $name, durationMinutes: $durationMinutes, price: $price })
+}
+
+mutation ToggleServiceArchive($id: UUID!, $isArchived: Boolean!) @auth(level: USER) {
+  service_update(id: $id, data: { isArchived: $isArchived })
+}
+
+# Marketing Automation
+query GetMarketingTriggers($orgId: UUID!) @auth(level: USER) {
+  marketingTriggers(where: { orgId: { eq: $orgId } }) {
+    id
+    triggerId
+    title
+    description
+    channel
+    enabled
+    delayValue
+    delayUnit
+    message
+  }
+}
+
+mutation CreateMarketingTrigger(
+  $orgId: UUID!,
+  $triggerId: String!,
+  $title: String!,
+  $description: String,
+  $channel: String!,
+  $enabled: Boolean!,
+  $delayValue: Int!,
+  $delayUnit: String!,
+  $message: String!
+) @auth(level: USER) {
+  marketingTrigger_insert(data: {
+    orgId: $orgId,
+    triggerId: $triggerId,
+    title: $title,
+    description: $description,
+    channel: $channel,
+    enabled: $enabled,
+    delayValue: $delayValue,
+    delayUnit: $delayUnit,
+    message: $message
+  })
+}
+
+mutation UpdateMarketingTrigger(
+  $id: UUID!,
+  $channel: String!,
+  $enabled: Boolean!,
+  $delayValue: Int!,
+  $delayUnit: String!,
+  $message: String!
+) @auth(level: USER) {
+  marketingTrigger_update(id: $id, data: {
+    channel: $channel,
+    enabled: $enabled,
+    delayValue: $delayValue,
+    delayUnit: $delayUnit,
+    message: $message
+  })
+}
+
+# Notification Settings
+query GetNotificationSettings($orgId: UUID!) @auth(level: USER) {
+  notificationSettings(where: { orgId: { eq: $orgId } }) {
+    id
+    smsEnabled
+    emailEnabled
+    reminder24h
+    reminder2h
+  }
+}
+
+mutation UpsertNotificationSettings(
+  $orgId: UUID!,
+  $smsEnabled: Boolean!,
+  $emailEnabled: Boolean!,
+  $reminder24h: Boolean!,
+  $reminder2h: Boolean!
+) @auth(level: USER) {
+  notificationSetting_upsert(data: {
+    orgId: $orgId,
+    smsEnabled: $smsEnabled,
+    emailEnabled: $emailEnabled,
+    reminder24h: $reminder24h,
+    reminder2h: $reminder2h
+  })
+}
+
+mutation UpdateOrgPatientCheckin($id: UUID!, $patientCheckinEnabled: Boolean!) @auth(level: USER) {
+  org_update(id: $id, data: { patientCheckinEnabled: $patientCheckinEnabled })
+}
+
+# Package Templates (Memberships)
+query GetOrgPackageTemplates($orgId: UUID!) @auth(level: USER) {
+  packageTemplates(where: { orgId: { eq: $orgId } }, orderBy: [{ createdAt: DESC }]) {
+    id
+    name
+    type
+    sessionCount
+    price
+    billingInterval
+    expiryDays
+    isActive
+    service {
+      id
+      name
+    }
+  }
+}
+
+mutation CreatePackageTemplate(
+  $orgId: UUID!,
+  $name: String!,
+  $type: String!,
+  $serviceId: UUID,
+  $sessionCount: Int,
+  $price: Float!,
+  $billingInterval: String,
+  $expiryDays: Int,
+  $isActive: Boolean!
+) @auth(level: USER) {
+  packageTemplate_insert(data: {
+    orgId: $orgId,
+    name: $name,
+    type: $type,
+    serviceId: $serviceId,
+    sessionCount: $sessionCount,
+    price: $price,
+    billingInterval: $billingInterval,
+    expiryDays: $expiryDays,
+    isActive: $isActive
+  })
+}
+
+mutation UpdatePackageTemplate(
+  $id: UUID!,
+  $name: String!,
+  $type: String!,
+  $serviceId: UUID,
+  $sessionCount: Int,
+  $price: Float!,
+  $billingInterval: String,
+  $expiryDays: Int,
+  $isActive: Boolean!
+) @auth(level: USER) {
+  packageTemplate_update(id: $id, data: {
+    name: $name,
+    type: $type,
+    serviceId: $serviceId,
+    sessionCount: $sessionCount,
+    price: $price,
+    billingInterval: $billingInterval,
+    expiryDays: $expiryDays,
+    isActive: $isActive
+  })
+}
+
+mutation TogglePackageTemplateActive($id: UUID!, $isActive: Boolean!) @auth(level: USER) {
+  packageTemplate_update(id: $id, data: { isActive: $isActive })
+}
+
+
 
 
 

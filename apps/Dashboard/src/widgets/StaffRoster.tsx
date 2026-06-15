@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useTerminology } from '../context/TerminologyContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgProfiles, getStaffShifts } from '@bridgeway/database'
 import EmptyState from '../components/EmptyState'
 
 const STATUS_OPTIONS = ['In Office', 'On Lunch', 'On Break', 'Out']
@@ -61,28 +62,30 @@ export default function StaffRoster() {
     try {
       const today = new Date().toISOString().split('T')[0]
 
-      const [staffRes, shiftRes] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, full_name, role, email')
-          .eq('org_id', profile.org_id)
-          .in('role', ['admin', 'manager', 'staff'])
-          .eq('is_active', true)
-          .order('full_name')
-          .limit(20),
-        supabase
-          .from('staff_shifts')
-          .select('staff_id, start_time, end_time')
-          .eq('org_id', profile.org_id)
-          .eq('shift_date', today),
+      const [profilesRes, shiftsRes] = await Promise.all([
+        getOrgProfiles(dataconnect, { orgId: profile.org_id }),
+        getStaffShifts(dataconnect, { orgId: profile.org_id, start: today, end: today })
       ])
 
-      setStaffList(staffRes.data || [])
+      const list = (profilesRes.data?.profiles || [])
+        .filter((p: any) => p.isActive && ['admin', 'manager', 'staff'].includes(p.role))
+        .map((p: any) => ({
+          id: p.id,
+          full_name: p.fullName,
+          role: p.role,
+          email: p.email,
+        }))
+      setStaffList(list)
 
       // Build shift lookup by staff_id
       const shiftMap = {}
-      ;(shiftRes.data || []).forEach(s => {
-        shiftMap[s.staff_id] = s
+      ;(shiftsRes.data?.staffShifts || []).forEach((s: any) => {
+        if (s.staff?.id) {
+          shiftMap[s.staff.id] = {
+            start_time: s.startTime,
+            end_time: s.endTime,
+          }
+        }
       })
       setTodayShifts(shiftMap)
     } catch {

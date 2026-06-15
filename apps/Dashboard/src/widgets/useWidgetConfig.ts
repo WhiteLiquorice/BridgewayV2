@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getWidgetConfig, upsertWidgetConfig } from '@bridgeway/database'
 import { WIDGET_IDS, canRoleSeeWidget } from './registry'
 
 const LS_KEY = 'bw_widget_config'
@@ -25,26 +26,21 @@ function mergeNewWidgets(storedConfig, role) {
 // Accepts userId (string) rather than the full user object so that token
 // refreshes — which produce a new user object reference — don't re-fire this
 // hook's effect and force WidgetCanvas into a full remount cycle.
-export function useWidgetConfig(userId, role) {
+export function useWidgetConfig(userId, role, orgId) {
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Load config: try Supabase first, fall back to localStorage
+  // Load config: try DataConnect first, fall back to localStorage
   useEffect(() => {
     if (!userId) { setLoading(false); return }
     async function load() {
       setLoading(true)
       try {
-        // Try Supabase widget_configs table
-        // TODO: migrate to org_id once schema migration is applied
-        const { data } = await supabase
-          .from('widget_configs')
-          .select('config')
-          .eq('user_id', userId)
-          .maybeSingle()
+        const { data } = await getWidgetConfig(dataconnect, { userId })
+        const storedConfig = data?.widgetConfigs?.[0]?.config
 
-        if (data?.config && data.config.order) {
-          setConfig(mergeNewWidgets(data.config, role))
+        if (storedConfig && storedConfig.order) {
+          setConfig(mergeNewWidgets(storedConfig, role))
         } else {
           // Fall back to localStorage
           const stored = localStorage.getItem(LS_KEY + '_' + userId)
@@ -52,7 +48,7 @@ export function useWidgetConfig(userId, role) {
           setConfig(parsed ? mergeNewWidgets(parsed, role) : getDefaultConfig(role))
         }
       } catch {
-        // If Supabase fails (table not created yet), use localStorage
+        // Fallback to localStorage
         const stored = localStorage.getItem(LS_KEY + '_' + userId)
         const parsed = stored ? JSON.parse(stored) : null
         setConfig(parsed ? mergeNewWidgets(parsed, role) : getDefaultConfig(role))
@@ -62,21 +58,21 @@ export function useWidgetConfig(userId, role) {
     load()
   }, [userId, role])
 
-  // Save config to both localStorage and Supabase
+  // Save config to both localStorage and DataConnect
   const saveConfig = useCallback(async (newConfig) => {
     if (!userId) return
     setConfig(newConfig)
     // Always save to localStorage immediately
     localStorage.setItem(LS_KEY + '_' + userId, JSON.stringify(newConfig))
-    // Best-effort Supabase sync
-    try {
-      await supabase
-        .from('widget_configs')
-        .upsert({ user_id: userId, config: newConfig, updated_at: new Date().toISOString() })
-    } catch {
-      // Supabase sync failed — localStorage is the fallback, no action needed
+    // Best-effort DataConnect sync
+    if (orgId) {
+      try {
+        await upsertWidgetConfig(dataconnect, { userId, orgId, config: newConfig })
+      } catch (err) {
+        console.error('DataConnect widget config sync failed:', err)
+      }
     }
-  }, [userId])
+  }, [userId, orgId])
 
   const reorder = useCallback((newOrder) => {
     const newConfig = { ...config, order: newOrder }

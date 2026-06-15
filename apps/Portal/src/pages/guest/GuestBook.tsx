@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useGuestOrg } from '../../context/GuestOrgContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getAvailableSlotsForBooking, createBooking } from '@bridgeway/database'
 
 // ── Shared style tokens ────────────────────────────────────────────────────────
 const card     = 'bg-white rounded-2xl border border-neutral-100 shadow-[0_4px_20px_rgb(0,0,0,0.04)] transition-all'
@@ -86,32 +87,32 @@ export default function GuestBook() {
   useEffect(() => {
     if (!org?.id) return
     setDataLoading(true)
-    Promise.all([
-      supabase.from('services')
-        .select('id, name, duration_minutes, price, description')
-        .eq('org_id', org.id)
-        .eq('is_archived', false)
-        .order('name'),
-      supabase.from('slots')
-        .select('id, start_time, end_time, staff_id, profiles(id, full_name)')
-        .eq('org_id', org.id)
-        .eq('status', 'available')
-        .gte('start_time', new Date().toISOString())
-        .order('start_time')
-        .limit(300),
-      supabase.from('org_settings')
-        .select('booking_config')
-        .eq('org_id', org.id)
-        .maybeSingle(),
-    ]).then(([{ data: svcs }, { data: sl }, { data: settings }]) => {
-      setServices(svcs || [])
-      setSlots(sl || [])
-      if (settings?.booking_config) {
-        setConfig(prev => ({ ...prev, ...settings.booking_config }))
-      }
-      setDataLoading(false)
-    })
-  }, [org?.id])
+    
+    if ((org as any).services) {
+      setServices((org as any).services)
+    }
+    if ((org as any).booking_config) {
+      setConfig(prev => ({ ...prev, ...(org as any).booking_config }))
+    }
+
+    getAvailableSlotsForBooking(dataconnect, { orgId: org.id, now: new Date().toISOString() })
+      .then(({ data }) => {
+        const mappedSlots = (data.slots || []).map((s: any) => ({
+          ...s,
+          start_time: s.startTime,
+          end_time: s.endTime,
+          staff_id: s.staff?.id || null,
+          profiles: s.staff ? { id: s.staff.id, full_name: s.staff.fullName } : null
+        }))
+        setSlots(mappedSlots as any)
+      })
+      .catch((err) => {
+        console.error(err)
+      })
+      .finally(() => {
+        setDataLoading(false)
+      })
+  }, [org])
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const providers = useMemo(() => {
@@ -154,26 +155,28 @@ export default function GuestBook() {
 
   // ── Submit ───────────────────────────────────────────────────────────────────
   async function handleSubmit() {
-    if (!selectedSlot || !selectedService) return
+    if (!selectedSlot || !selectedService || !org?.id) return
     if (!guestName.trim() || !guestEmail.trim()) return
     if (config.require_phone && !guestPhone.trim()) return
     setSubmitError(null)
     setSubmitting(true)
     try {
-      const { error: err } = await supabase.from('bookings').insert({
-        org_id:     org.id,
-        service_id: selectedService.id,
-        slot_id:    selectedSlot.id,
-        name:       guestName.trim(),
-        email:      guestEmail.trim(),
-        phone:      guestPhone.trim() || null,
-        notes:      guestNotes.trim() || null,
-        status:     'pending',
+      await createBooking(dataconnect, {
+        orgId: org.id,
+        serviceId: selectedService.id,
+        slotId: selectedSlot.id,
+        name: guestName.trim(),
+        email: guestEmail.trim(),
+        phone: guestPhone.trim() || null,
+        notes: guestNotes.trim() || null,
+        status: 'pending',
+        paymentStatus: null,
+        preferredDate: null,
+        preferredTime: null
       })
-      if (err) { setSubmitError(err.message); return }
       setSubmitted(true)
-    } catch {
-      setSubmitError('Failed to submit. Please try again.')
+    } catch (err: any) {
+      setSubmitError(err.message || 'Failed to submit. Please try again.')
     } finally {
       setSubmitting(false)
     }

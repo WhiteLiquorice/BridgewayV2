@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getClientAppointments, updateProfileInfo } from '@bridgeway/database'
 
 export default function ClientProfile() {
-  const { profile, user } = useAuth()
+  const { profile, user, clientId } = useAuth()
   const { primaryColor } = useTheme()
 
   const [form, setForm] = useState({ full_name: '', email: '', phone: '' })
@@ -23,34 +24,34 @@ export default function ClientProfile() {
 
   // Fetch visit stats for this client
   useEffect(() => {
-    if (!profile?.id) return
-    supabase
-      .from('appointments')
-      .select('status, amount')
-      .eq('client_id', profile.id)
-      .neq('status', 'cancelled')
+    if (!clientId) return
+    getClientAppointments(dataconnect, { clientId })
       .then(({ data }) => {
-        const all = data || []
+        const all = data?.appointments || []
+        const active = all.filter((a: any) => a.status !== 'cancelled')
         setStats({
-          total: all.length,
-          spent: all.reduce((sum, a) => sum + (parseFloat(a.amount) || 0), 0),
+          total: active.length,
+          spent: active.reduce((sum: number, a: any) => sum + (parseFloat(a.amount as any) || 0), 0),
         })
       })
-  }, [profile?.id])
+      .catch(console.error)
+  }, [clientId])
 
   async function handleSave(e) {
     e.preventDefault()
     setMsg(null)
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ full_name: form.full_name, email: form.email, phone: form.phone })
-        .eq('id', profile.id)
-      if (error) setMsg({ type: 'error', text: error.message })
-      else setMsg({ type: 'success', text: 'Profile updated.' })
-    } catch {
-      setMsg({ type: 'error', text: 'Failed to save — check your connection and try again.' })
+      if (!profile?.id) return
+      await updateProfileInfo(dataconnect, {
+        id: profile.id,
+        fullName: form.full_name,
+        email: form.email,
+        phone: form.phone
+      })
+      setMsg({ type: 'success', text: 'Profile updated.' } as any)
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message || 'Failed to save — check your connection and try again.' } as any)
     } finally {
       setLoading(false)
     }

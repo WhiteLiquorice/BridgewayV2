@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getUnconfirmedAppointments, updateAppointmentStatus } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 
 export default function UnconfirmedAppointments() {
@@ -20,19 +21,23 @@ export default function UnconfirmedAppointments() {
   async function fetchUnconfirmed() {
     setLoading(true)
     setError(false)
+    const now = new Date().toISOString()
     const in48h = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
 
     try {
-      const { data } = await supabase
-        .from('appointments')
-        .select('id, scheduled_at, clients(name, email, phone), services(name)')
-        .eq('org_id', profile.org_id)
-        .lt('scheduled_at', in48h)
-        .gte('scheduled_at', new Date().toISOString())
-        .eq('status', 'pending')
-        .order('scheduled_at')
+      const { data } = await getUnconfirmedAppointments(dataconnect, {
+        orgId: profile.org_id,
+        now,
+        in48h,
+      })
 
-      setAppointments(data || [])
+      const list = (data?.appointments || []).map((appt: any) => ({
+        id: appt.id,
+        scheduled_at: appt.scheduledAt,
+        clients: appt.client ? { name: appt.client.name, email: appt.client.email, phone: appt.client.phone } : null,
+        services: appt.service ? { name: appt.service.name } : null,
+      }))
+      setAppointments(list)
     } catch {
       setError(true)
       setAppointments([])
@@ -44,7 +49,7 @@ export default function UnconfirmedAppointments() {
   async function handleConfirm(id) {
     setConfirming(id)
     try {
-      await supabase.from('appointments').update({ status: 'confirmed' }).eq('id', id)
+      await updateAppointmentStatus(dataconnect, { id, status: 'confirmed' })
       await fetchUnconfirmed()
     } catch { /* silent */ }
     finally { setConfirming(null) }

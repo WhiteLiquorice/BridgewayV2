@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgProfiles, getOrgById, getOrgSettings, updateOrgStripeCredentials } from '@bridgeway/database'
 import { functions } from '../lib/firebase'
 import { httpsCallable } from 'firebase/functions'
 
@@ -21,7 +22,7 @@ function Toggle({ enabled, onChange }) {
 }
 
 export default function Billing() {
-  const { profile, org } = useAuth()
+  const { profile } = useAuth()
 
   const [staffCount, setStaffCount] = useState(0)
   const [loading,    setLoading]    = useState(true)
@@ -43,34 +44,40 @@ export default function Billing() {
   // Portal redirect state
   const [portalLoading, setPortalLoading] = useState(false)
 
-  useEffect(() => {
-    async function loadData() {
-      if (!profile?.org_id) return
-      setLoading(true)
-      try {
-        const [staffRes, orgRes, settingsRes] = await Promise.all([
-          supabase.from('profiles').select('id', { count: 'exact', head: true })
-            .eq('org_id', profile.org_id).in('role', ['admin', 'manager', 'staff']),
-          supabase.from('orgs').select('stripe_publishable_key').eq('id', profile.org_id).single(),
-          supabase.from('org_settings').select('stripe_secret_key, payment_required, stripe_customer_id, stripe_subscription_id, payment_past_due, stripe_account_id')
-            .eq('org_id', profile.org_id).maybeSingle(),
-        ])
-        if (staffRes.error) { setError(staffRes.error.message); return }
-        setStaffCount(staffRes.count ?? 0)
-        if (orgRes.data?.stripe_publishable_key) setStripePk(orgRes.data.stripe_publishable_key)
-        if (settingsRes.data) {
-          if (settingsRes.data.stripe_secret_key) setStripeSk(settingsRes.data.stripe_secret_key)
-          setStripeAccountId(settingsRes.data.stripe_account_id ?? null)
-          setPaymentReq(settingsRes.data.payment_required ?? false)
-          setStripeCustomerId(settingsRes.data.stripe_customer_id ?? null)
-          setPaymentPastDue(settingsRes.data.payment_past_due ?? false)
-        }
-      } catch {
-        setError('Failed to load billing data — check your connection.')
-      } finally {
-        setLoading(false)
+  const loadData = async () => {
+    if (!profile?.org_id) return
+    setLoading(true)
+    try {
+      const [profilesRes, orgRes, settingsRes] = await Promise.all([
+        getOrgProfiles(dataconnect, { orgId: profile.org_id }),
+        getOrgById(dataconnect, { id: profile.org_id }),
+        getOrgSettings(dataconnect, { orgId: profile.org_id })
+      ])
+
+      const activeStaff = (profilesRes.data?.profiles || [])
+        .filter((p: any) => p.isActive && ['admin', 'manager', 'staff'].includes(p.role))
+      setStaffCount(activeStaff.length)
+
+      if (orgRes.data?.org?.stripePublishableKey) {
+        setStripePk(orgRes.data.org.stripePublishableKey)
       }
+
+      if (settingsRes.data?.orgSettings?.[0]) {
+        const s = settingsRes.data.orgSettings[0]
+        if (s.stripeSecretKey) setStripeSk(s.stripeSecretKey)
+        setStripeAccountId(s.stripeAccountId ?? null)
+        setPaymentReq(s.paymentRequired ?? false)
+        setStripeCustomerId(s.stripeCustomerId ?? null)
+        setPaymentPastDue(s.paymentPastDue ?? false)
+      }
+    } catch {
+      setError('Failed to load billing data — check your connection.')
+    } finally {
+      setLoading(false)
     }
+  }
+
+  useEffect(() => {
     loadData()
   }, [profile?.org_id])
 
@@ -113,15 +120,15 @@ export default function Billing() {
     setStripeSaving(true)
     setStripeSuccess(false)
     try {
-      await supabase.from('orgs').update({ stripe_publishable_key: stripePk.trim() || null })
-        .eq('id', profile.org_id)
-      await supabase.from('org_settings').upsert({
-        org_id: profile.org_id,
-        stripe_secret_key: stripeSk.trim() || null,
-        payment_required: paymentReq,
-      }, { onConflict: 'org_id' })
+      await updateOrgStripeCredentials(dataconnect, {
+        orgId: profile.org_id,
+        stripePublishableKey: stripePk.trim() || null,
+        stripeSecretKey: stripeSk.trim() || null,
+        paymentRequired: paymentReq,
+      })
       setStripeSuccess(true)
       setTimeout(() => setStripeSuccess(false), 3000)
+      loadData()
     } catch { /* ignore */ }
     finally { setStripeSaving(false) }
   }
@@ -289,20 +296,35 @@ export default function Billing() {
         <h2 className="text-sm font-semibold text-white mb-1">Connect Stripe</h2>
         <p className="text-xs text-gray-500 mb-4">Collect payments securely from clients at booking time via Stripe Connect.</p>
         
-        <div className="space-y-4">
+        <form onSubmit={saveStripeKeys} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Publishable Key</label>
+            <input
+              type="text"
+              value={stripePk}
+              onChange={e => setStripePk(e.target.value)}
+              placeholder="pk_live_..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Secret Key</label>
+            <input
+              type="password"
+              value={stripeSk}
+              onChange={e => setStripeSk(e.target.value)}
+              placeholder="sk_live_..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand"
+            />
+          </div>
           <div className="flex items-center justify-between pt-2">
             <div>
               <p className="text-sm font-medium text-white">Require payment at booking</p>
               <p className="text-xs text-gray-500 mt-0.5">If enabled, clients must pay when booking. If disabled, payment is collected at visit.</p>
             </div>
-            <Toggle enabled={paymentReq} onChange={async (val) => {
-              setPaymentReq(val)
-              await supabase.from('org_settings').upsert({
-                org_id: profile.org_id,
-                payment_required: val,
-              }, { onConflict: 'org_id' })
-            }} />
+            <Toggle enabled={paymentReq} onChange={val => setPaymentReq(val)} />
           </div>
+          
           <div className="flex items-center justify-between pt-4 border-t border-gray-800/60">
             <div className="flex flex-col">
               {stripeAccountId ? (
@@ -318,33 +340,18 @@ export default function Billing() {
                 </div>
               )}
             </div>
-            <button 
-              onClick={async () => {
-                setStripeSaving(true)
-                try {
-                  const connectStripe = httpsCallable(functions, 'connectStripeAccount')
-                  const { data } = await connectStripe({ 
-                    orgId: profile.org_id,
-                    returnUrl: window.location.href,
-                    refreshUrl: window.location.href
-                  })
-                  if (data?.url) {
-                    window.location.href = data.url
-                  }
-                } catch (e) {
-                  console.error('Failed to connect Stripe:', e)
-                } finally {
-                  setStripeSaving(false)
-                }
-              }} 
-              disabled={stripeSaving}
-              className={`px-5 py-2.5 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors ${
-                stripeAccountId ? 'bg-gray-800 hover:bg-gray-700 border border-gray-700' : 'bg-[#635BFF] hover:bg-[#5851df]'
-              }`}>
-              {stripeSaving ? 'Connecting...' : (stripeAccountId ? 'Update Connection' : 'Connect with Stripe')}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                disabled={stripeSaving}
+                className="px-5 py-2.5 bg-brand hover:bg-brand disabled:opacity-50 text-[#0c1a2e] text-sm font-semibold rounded-lg transition-colors"
+              >
+                {stripeSaving ? 'Saving...' : 'Save Keys'}
+              </button>
+              {stripeSuccess && <span className="text-sm text-green-400 self-center">Saved!</span>}
+            </div>
           </div>
-        </div>
+        </form>
       </div>
 
       {/* Footer note */}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getTodayFloorAppointments, updateAppointmentStatus } from '@bridgeway/database'
 import { STATUS_LABELS, getStatusStyle, getNextStatus, NEXT_ACTION_LABELS, NEXT_ACTION_STYLES } from '../lib/appointmentStatus'
 
 export default function WaitingRoomQueue() {
@@ -18,16 +19,22 @@ export default function WaitingRoomQueue() {
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
 
     try {
-      const { data } = await supabase
-        .from('appointments')
-        .select('id, scheduled_at, status, clients(name), services(name)')
-        .eq('org_id', profile.org_id)
-        .gte('scheduled_at', startOfDay)
-        .lte('scheduled_at', endOfDay)
-        .in('status', ['arrived', 'with_provider'])
-        .order('scheduled_at')
+      const { data } = await getTodayFloorAppointments(dataconnect, {
+        orgId: profile.org_id,
+        todayStart: startOfDay,
+        todayEnd: endOfDay,
+      })
 
-      setQueue(data || [])
+      const list = (data?.appointments || [])
+        .filter((a: any) => ['arrived', 'with_provider'].includes(a.status))
+        .map((a: any) => ({
+          id: a.id,
+          scheduled_at: a.scheduledAt,
+          status: a.status,
+          clients: a.client ? { name: a.client.name } : null,
+          services: a.service ? { name: a.service.name } : null,
+        }))
+      setQueue(list)
     } catch {
       setError(true)
       setQueue([])
@@ -39,23 +46,8 @@ export default function WaitingRoomQueue() {
   useEffect(() => {
     if (!profile?.org_id) return
     fetchQueue()
-    const interval = setInterval(fetchQueue, 30000)
+    const interval = setInterval(fetchQueue, 10000)
     return () => clearInterval(interval)
-  }, [profile?.org_id, fetchQueue])
-
-  useEffect(() => {
-    if (!profile?.org_id) return
-    const channel = supabase
-      .channel('waiting-room-queue-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'queue_entries',
-      }, () => {
-        fetchQueue()
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
   }, [profile?.org_id, fetchQueue])
 
   async function advanceStatus(id, currentStatus) {
@@ -63,7 +55,7 @@ export default function WaitingRoomQueue() {
     if (!next) return
     setUpdating(id)
     try {
-      await supabase.from('appointments').update({ status: next }).eq('id', id)
+      await updateAppointmentStatus(dataconnect, { id, status: next })
       if (next === 'completed') {
         setQueue(prev => prev.filter(a => a.id !== id))
       } else {

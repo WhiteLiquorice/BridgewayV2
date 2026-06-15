@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { searchClients } from '@bridgeway/database'
 
 export default function QuickClientLookup() {
   const { profile } = useAuth()
@@ -29,15 +30,13 @@ export default function QuickClientLookup() {
     debounceRef.current = setTimeout(async () => {
       const gen = ++genRef.current
       try {
-        const { data } = await supabase
-          .from('clients')
-          .select('id, name, email, phone')
-          .eq('org_id', profile.org_id)
-          .ilike('name', `%${query}%`)
-          .limit(5)
+        const { data } = await searchClients(dataconnect, {
+          orgId: profile.org_id,
+          query: query.trim(),
+        })
 
         if (gen !== genRef.current) return  // stale — a newer search is in flight
-        setResults(data || [])
+        setResults(data?.clients || [])
       } catch {
         if (gen !== genRef.current) return
         setResults([])

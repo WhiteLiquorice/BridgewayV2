@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getAnnouncements, createAnnouncement, deleteAnnouncement } from '@bridgeway/database'
 import EmptyState from '../components/EmptyState'
 
 export default function Announcements() {
@@ -22,13 +23,15 @@ export default function Announcements() {
     setLoading(true)
     setError(false)
     try {
-      const { data } = await supabase
-        .from('announcements')
-        .select('id, message, posted_at, profiles(full_name)')
-        .eq('org_id', profile.org_id)
-        .order('posted_at', { ascending: false })
-        .limit(20)
-      setAnnouncements(data || [])
+      const { data } = await getAnnouncements(dataconnect, { orgId: profile.org_id })
+      setAnnouncements(
+        (data?.announcements || []).map((ann: any) => ({
+          id: ann.id,
+          message: ann.message,
+          posted_at: ann.postedAt,
+          profiles: ann.postedBy ? { full_name: ann.postedBy.fullName } : null,
+        }))
+      )
     } catch {
       setError(true)
       setAnnouncements([])
@@ -41,9 +44,11 @@ export default function Announcements() {
     const message = inputText.trim()
     if (!message) return
     try {
-      await supabase
-        .from('announcements')
-        .insert({ org_id: profile.org_id, message, posted_by: profile.id })
+      await createAnnouncement(dataconnect, {
+        orgId: profile.org_id,
+        message,
+        postedById: profile.id,
+      })
       setInputText('')
       await fetchAnnouncements()
     } catch {
@@ -53,11 +58,7 @@ export default function Announcements() {
 
   async function removeAnnouncement(id) {
     try {
-      await supabase
-        .from('announcements')
-        .delete()
-        .eq('id', id)
-        .eq('org_id', profile.org_id)
+      await deleteAnnouncement(dataconnect, { id })
       await fetchAnnouncements()
     } catch {
       // silent

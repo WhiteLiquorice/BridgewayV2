@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgWaitlist, updateClassRegistrationStatus } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import EmptyState from '../components/EmptyState'
 
@@ -21,16 +22,17 @@ export default function WaitlistManager() {
       setLoading(true)
       setError(null)
       try {
-        const { data, error: err } = await supabase
-          .from('class_registrations')
-          .select('*, client:clients!client_id(name, email, phone), class:classes!class_id(name, day_of_week, start_time, capacity)')
-          .eq('org_id', orgId)
-          .eq('status', 'waitlisted')
-          .order('created_at')
-
-        if (err) throw err
-        if (!cancelled) setWaitlisted(data || [])
-      } catch (err) {
+        const { data } = await getOrgWaitlist(dataconnect, { orgId })
+        const list = (data?.classRegistrations || []).map((w: any) => ({
+          id: w.id,
+          classDate: w.classDate,
+          status: w.status,
+          createdAt: w.createdAt,
+          client: w.client ? { name: w.client.name, email: w.client.email, phone: w.client.phone } : null,
+          classEntity: w.classEntity ? { name: w.classEntity.name, dayOfWeek: w.classEntity.dayOfWeek, startTime: w.classEntity.startTime, capacity: w.classEntity.capacity } : null,
+        }))
+        if (!cancelled) setWaitlisted(list)
+      } catch (err: any) {
         if (!cancelled) setError(err.message)
       } finally {
         if (!cancelled) setLoading(false)
@@ -43,30 +45,20 @@ export default function WaitlistManager() {
 
   async function promoteToRegistered(regId) {
     try {
-      const { error: err } = await supabase
-        .from('class_registrations')
-        .update({ status: 'registered' })
-        .eq('id', regId)
-
-      if (err) throw err
+      await updateClassRegistrationStatus(dataconnect, { id: regId, status: 'registered' })
       setWaitlisted(prev => prev.filter(w => w.id !== regId))
       showToast('Client promoted from waitlist', 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }
 
   async function removeFromWaitlist(regId) {
     try {
-      const { error: err } = await supabase
-        .from('class_registrations')
-        .update({ status: 'cancelled' })
-        .eq('id', regId)
-
-      if (err) throw err
+      await updateClassRegistrationStatus(dataconnect, { id: regId, status: 'cancelled' })
       setWaitlisted(prev => prev.filter(w => w.id !== regId))
       showToast('Removed from waitlist', 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }
@@ -97,10 +89,10 @@ export default function WaitlistManager() {
             <div className="min-w-0 flex-1">
               <div className="text-sm text-white font-medium truncate">{w.client?.name || 'Unknown'}</div>
               <div className="text-xs text-gray-500 mt-0.5">
-                {w.class?.name || 'Unknown class'} · {w.class?.day_of_week != null ? DAYS[w.class.day_of_week] : ''} {w.class?.start_time?.slice(0, 5) || ''}
+                {w.classEntity?.name || 'Unknown class'} · {w.classEntity?.dayOfWeek != null ? DAYS[w.classEntity.dayOfWeek] : ''} {w.classEntity?.startTime?.slice(0, 5) || ''}
               </div>
               <div className="text-xs text-gray-600 mt-0.5">
-                for {w.class_date}
+                for {w.classDate}
               </div>
             </div>
             <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">

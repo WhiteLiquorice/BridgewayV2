@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgIntakeTemplates, createIntakeTemplate, updateIntakeTemplate, deleteIntakeTemplate } from '@bridgeway/database'
 
 const FIELD_TYPES = [
   { type: 'text',      label: 'Short Text' },
@@ -121,12 +122,28 @@ function FormModal({ form, onClose, onSaved, orgId }) {
   async function handleSave() {
     if (!name.trim()) return
     setSaving(true)
-    const payload = { org_id: orgId, name: name.trim(), fields, is_active: isActive }
-    const { error } = form?.id
-      ? await supabase.from('intake_form_templates').update(payload).eq('id', form.id)
-      : await supabase.from('intake_form_templates').insert(payload)
-    setSaving(false)
-    if (!error) onSaved()
+    try {
+      if (form?.id) {
+        await updateIntakeTemplate(dataconnect, {
+          id: form.id,
+          name: name.trim(),
+          fields,
+          isActive,
+        })
+      } else {
+        await createIntakeTemplate(dataconnect, {
+          orgId,
+          name: name.trim(),
+          fields,
+          isActive,
+        })
+      }
+      onSaved()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -213,13 +230,22 @@ export default function Forms() {
 
   async function loadForms() {
     if (!org?.id) return
-    const { data } = await supabase
-      .from('intake_form_templates')
-      .select('id, name, fields, is_active, created_at')
-      .eq('org_id', org.id)
-      .order('created_at', { ascending: false })
-    setForms(data || [])
-    setLoading(false)
+    try {
+      const { data } = await getOrgIntakeTemplates(dataconnect, { orgId: org.id })
+      const list = (data?.intakeFormTemplates || []).map((form: any) => ({
+        id: form.id,
+        name: form.name,
+        fields: form.fields,
+        is_active: form.isActive,
+        created_at: form.createdAt,
+      }))
+      setForms(list)
+    } catch (err) {
+      console.error(err)
+      setForms([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -227,16 +253,27 @@ export default function Forms() {
   }, [org?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleToggleActive(form) {
-    await supabase.from('intake_form_templates')
-      .update({ is_active: !form.is_active })
-      .eq('id', form.id)
-    loadForms()
+    try {
+      await updateIntakeTemplate(dataconnect, {
+        id: form.id,
+        name: form.name,
+        fields: form.fields,
+        isActive: !form.is_active,
+      })
+      loadForms()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   async function handleDelete(id) {
     if (!confirm('Delete this form? This cannot be undone.')) return
-    await supabase.from('intake_form_templates').delete().eq('id', id)
-    loadForms()
+    try {
+      await deleteIntakeTemplate(dataconnect, { id })
+      loadForms()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   function openNew() { setEditingForm(null); setModalOpen(true) }

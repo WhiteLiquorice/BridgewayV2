@@ -3,7 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getAppointmentsForReports } from '@bridgeway/database'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -39,13 +40,13 @@ export default function Revenue() {
       sixMonthsAgo.setDate(1)
       sixMonthsAgo.setHours(0, 0, 0, 0)
 
-      const { data: appts } = await supabase
-        .from('appointments')
-        .select('scheduled_at, amount, status, services(name)')
-        .eq('org_id', profile.org_id)
-        .neq('status', 'cancelled')
-        .gte('scheduled_at', sixMonthsAgo.toISOString())
-        .order('scheduled_at', { ascending: true })
+      const { data } = await getAppointmentsForReports(dataconnect, { orgId: profile.org_id, since: sixMonthsAgo.toISOString() })
+      const appts = (data?.appointments || []).map((a: any) => ({
+        scheduled_at: a.scheduledAt,
+        amount: a.amount,
+        status: a.status,
+        services: a.service ? { name: a.service.name } : null
+      }))
 
       if (!appts) return
 

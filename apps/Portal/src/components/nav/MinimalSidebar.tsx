@@ -2,17 +2,16 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { supabase } from '../../lib/supabase'
 import { navItems, LogOutIcon } from './navItems'
 
 export default function MinimalSidebar() {
-  const { profile, user, org } = useAuth()
+  const { profile, user, org, signOut } = useAuth()
   const { primaryColor } = useTheme()
   const navigate = useNavigate()
   const [hoveredItem, setHoveredItem] = useState(null)
 
   async function handleSignOut() {
-    try { await supabase.auth.signOut() } catch { /* onAuthStateChange fires SIGNED_OUT locally regardless */ }
+    try { await signOut() } catch { /* ignore */ }
     navigate('/login')
   }
 

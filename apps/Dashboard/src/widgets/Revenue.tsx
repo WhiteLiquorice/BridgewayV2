@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getAppointmentsForReports } from '@bridgeway/database'
 import AnimatedNumber from '../components/AnimatedNumber'
-
-// Role-restricted: only admin and manager roles can see this widget.
-// Enforced in registry.js (roles: ['admin', 'manager']) and useWidgetConfig (hidden by default for staff).
 
 export default function Revenue() {
   const { profile } = useAuth()
@@ -23,32 +21,28 @@ export default function Revenue() {
     setLoading(true)
     setError(false)
     const now = new Date()
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString()
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
     try {
-      const { data: todayAppts } = await supabase
-        .from('appointments')
-        .select('amount, status')
-        .eq('org_id', profile.org_id)
-        .gte('scheduled_at', startOfDay)
-        .lte('scheduled_at', endOfDay)
-        .neq('status', 'cancelled')
+      const { data } = await getAppointmentsForReports(dataconnect, {
+        orgId: profile.org_id,
+        since: startOfMonth.toISOString(),
+      })
 
-      const { data: monthAppts } = await supabase
-        .from('appointments')
-        .select('amount, status')
-        .eq('org_id', profile.org_id)
-        .gte('scheduled_at', startOfMonth)
-        .neq('status', 'cancelled')
+      const monthAppts = (data?.appointments || []).filter((a: any) => a.status !== 'cancelled')
+      const todayAppts = monthAppts.filter((a: any) => {
+        const scheduledTime = new Date(a.scheduledAt).getTime()
+        return scheduledTime >= startOfDay.getTime() && scheduledTime <= endOfDay.getTime()
+      })
 
-      const todayTotal = (todayAppts || []).reduce((sum, a) => sum + Number(a.amount || 0), 0)
-      const monthTotal = (monthAppts || []).reduce((sum, a) => sum + Number(a.amount || 0), 0)
+      const todayTotal = todayAppts.reduce((sum, a) => sum + Number(a.amount || 0), 0)
+      const monthTotal = monthAppts.reduce((sum, a) => sum + Number(a.amount || 0), 0)
 
       setTodayRevenue(todayTotal)
       setMonthRevenue(monthTotal)
-      setApptCount((todayAppts || []).length)
+      setApptCount(todayAppts.length)
     } catch {
       setError(true)
     } finally {

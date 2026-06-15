@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import { useTerminology } from '../../context/TerminologyContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getClientAppointments, getOrgQueue, createQueueEntry } from '@bridgeway/database'
 
 function QuickLink({ to, label, description, icon }) {
   return (
@@ -21,7 +22,7 @@ function QuickLink({ to, label, description, icon }) {
 }
 
 export default function ClientDashboard() {
-  const { profile, org } = useAuth()
+  const { profile, org, clientId, client } = useAuth()
   const { primaryColor } = useTheme()
   const { terms } = useTerminology()
 
@@ -38,26 +39,32 @@ export default function ClientDashboard() {
   }, [])
 
   useEffect(() => {
-    if (!profile?.org_id) return
+    if (!clientId) {
+      setLoading(false)
+      return
+    }
     async function fetchData() {
       setLoading(true)
       try {
-        const now = new Date().toISOString()
-        const [nextRes] = await Promise.all([
-          supabase.from('appointments')
-            .select('*, service:services!service_id(name)')
-            .eq('status', 'confirmed')
-            .gt('scheduled_at', now)
-            .order('scheduled_at', { ascending: true })
-            .limit(1),
-        ])
-        setNextAppt(nextRes.data?.[0] || null)
+        const res = await getClientAppointments(dataconnect, { clientId })
+        const confirmedUpcoming = (res.data.appointments || [])
+          .filter((a: any) => a.status === 'confirmed' && new Date(a.scheduledAt).getTime() > nowMs)
+          .sort((a: any, b: any) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
+        
+        const next = confirmedUpcoming[0] ? {
+          ...confirmedUpcoming[0],
+          scheduled_at: confirmedUpcoming[0].scheduledAt,
+          service: {
+            name: confirmedUpcoming[0].service?.name || ''
+          }
+        } : null
+        setNextAppt(next as any)
       } catch { /* leave stale */ } finally {
         setLoading(false)
       }
     }
     fetchData()
-  }, [profile?.org_id])
+  }, [clientId, nowMs])
 
   const apptTime  = nextAppt ? new Date(nextAppt.scheduled_at).getTime() : null
   const isToday   = apptTime ? new Date(apptTime).toDateString() === new Date(nowMs).toDateString() : false
@@ -70,28 +77,27 @@ export default function ClientDashboard() {
     setCheckingIn(true)
     setCheckInMsg('')
     try {
-      const { data: clientRecord, error: clientErr } = await supabase
-        .from('clients')
-        .select('id, name, phone')
-        .eq('org_id', profile.org_id)
-        .eq('email', profile.email)
-        .maybeSingle()
-      if (clientErr) throw clientErr
-      if (!clientRecord) {
+      if (!clientId || !client) {
         setCheckInMsg(`Could not find your ${terms.client.singular.toLowerCase()} record. Please check in at the front desk.`)
         return
       }
-      const { error: queueErr } = await supabase.from('queue_entries').insert({
-        org_id:      profile.org_id,
-        client_id:   clientRecord.id,
-        client_name: clientRecord.name,
-        status:      'waiting',
-        joined_at:   new Date().toISOString(),
+      
+      const { data: queueData } = await getOrgQueue(dataconnect, { orgId: profile.org_id })
+      const activeEntries = (queueData?.queueEntries || []).filter(
+        (entry: any) => entry.status === 'waiting' || entry.status === 'serving' || entry.status === 'called'
+      )
+      const position = activeEntries.length + 1
+
+      await createQueueEntry(dataconnect, {
+        orgId: profile.org_id,
+        clientName: client.name,
+        clientId: clientId,
+        status: 'waiting',
+        position: position
       })
-      if (queueErr) throw queueErr
       setCheckedIn(true)
       setCheckInMsg("You've been added to the queue. We'll be with you shortly.")
-    } catch (err) {
+    } catch (err: any) {
       setCheckInMsg(err.message || 'Something went wrong. Please check in at the front desk.')
     } finally {
       setCheckingIn(false)

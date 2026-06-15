@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getNotificationSettings, upsertNotificationSettings, updateOrgPatientCheckin } from '@bridgeway/database'
 
 // Reusable toggle switch
 function Toggle({ enabled, onChange, disabled = false }) {
@@ -53,26 +54,22 @@ export default function NotificationSettings() {
   const [checkinSaving,  setCheckinSaving]  = useState(false)
 
   useEffect(() => {
-    if (org) setCheckinEnabled(org.patient_checkin_enabled ?? true)
-  }, [org?.id])
+    if (org) setCheckinEnabled(org.patientCheckinEnabled ?? org.patient_checkin_enabled ?? true)
+  }, [org?.id, org?.patientCheckinEnabled, org?.patient_checkin_enabled])
 
   useEffect(() => {
     async function loadSettings() {
       if (!profile?.org_id) return
       setLoading(true)
       try {
-        const { data, error: err } = await supabase
-          .from('notification_settings')
-          .select('*')
-          .eq('org_id', profile.org_id)
-          .maybeSingle()
-        if (err) { setError(err.message); return }
+        const res = await getNotificationSettings(dataconnect, { orgId: profile.org_id })
+        const data = res.data.notificationSettings[0]
         if (data) {
           setSettings({
-            sms_enabled:   data.sms_enabled   ?? false,
-            email_enabled: data.email_enabled ?? false,
-            reminder_24h:  data.reminder_24h  ?? true,
-            reminder_2h:   data.reminder_2h   ?? false,
+            sms_enabled:   data.smsEnabled   ?? false,
+            email_enabled: data.emailEnabled ?? false,
+            reminder_24h:  data.reminder24h  ?? true,
+            reminder_2h:   data.reminder2h   ?? false,
           })
           setRowExists(true)
         } else {
@@ -80,8 +77,8 @@ export default function NotificationSettings() {
           setSettings(DEFAULTS)
           setRowExists(false)
         }
-      } catch {
-        setError('Failed to load notification settings — check your connection.')
+      } catch (err: any) {
+        setError(err.message || 'Failed to load notification settings — check your connection.')
       } finally {
         setLoading(false)
       }
@@ -94,11 +91,12 @@ export default function NotificationSettings() {
   }
 
   async function toggleCheckin() {
+    if (!profile?.org_id) return
     const next = !checkinEnabled
     setCheckinEnabled(next)
     setCheckinSaving(true)
     try {
-      await supabase.from('orgs').update({ patient_checkin_enabled: next }).eq('id', profile.org_id)
+      await updateOrgPatientCheckin(dataconnect, { id: profile.org_id, patientCheckinEnabled: next })
     } catch {
       setCheckinEnabled(!next) // revert on error
     } finally {
@@ -113,18 +111,22 @@ export default function NotificationSettings() {
     setError(null)
     setSuccess(false)
 
-    const payload = { org_id: profile.org_id, ...settings }
-
-    // Upsert — inserts if no row exists, updates if it does
-    const { error: err } = await supabase
-      .from('notification_settings')
-      .upsert(payload, { onConflict: 'org_id' })
-
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    setRowExists(true)
-    setSuccess(true)
-    setTimeout(() => setSuccess(false), 3000)
+    try {
+      await upsertNotificationSettings(dataconnect, {
+        orgId: profile.org_id,
+        smsEnabled: settings.sms_enabled,
+        emailEnabled: settings.email_enabled,
+        reminder24h: settings.reminder_24h,
+        reminder2h: settings.reminder_2h
+      })
+      setRowExists(true)
+      setSuccess(true)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err: any) {
+      setError(err.message || 'Failed to save settings.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // 24h and 2h toggles are only meaningful when at least one channel is enabled

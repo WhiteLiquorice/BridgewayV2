@@ -1,12 +1,13 @@
-import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 
 /**
  * Paywall — shown to patients when org.status === 'inactive'.
  * Patients cannot fix billing themselves; we direct them to support.
  */
 export default function Paywall() {
+  const { signOut } = useAuth()
   function handleSignOut() {
-    supabase.auth.signOut()
+    signOut()
   }
 
   return (

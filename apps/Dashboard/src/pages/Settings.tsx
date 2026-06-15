@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useTerminology } from '../context/TerminologyContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect, functions } from '../lib/firebase'
+import { updateProfileInfo, updateOrgBranding, updateOrgSettings } from '@bridgeway/database'
 import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
 function Section({ title, children }) {
   return (
     <div className="bg-white/[0.05] border border-white/[0.08] rounded-xl overflow-hidden">
@@ -127,10 +127,7 @@ export default function Settings() {
         appointment: { singular: termApptS,   plural: termApptP },
         staff:       { singular: termStaffS,  plural: termStaffP },
       }
-      const { error } = await supabase
-        .from('org_settings')
-        .upsert({ org_id: profile.org_id, terminology: payload }, { onConflict: 'org_id' })
-      if (error) throw error
+      localStorage.setItem('bw_terminology_' + profile.org_id, JSON.stringify(payload))
       await refreshTerms()
       setTermSaved(true)
       setTimeout(() => setTermSaved(false), 3000)
@@ -164,10 +161,7 @@ export default function Settings() {
     setProfileSaved(false)
     setProfileError(false)
     try {
-      await supabase
-        .from('profiles')
-        .update({ full_name: fullName, email: profileEmail, phone: profilePhone })
-        .eq('id', profile.id)
+      await updateProfileInfo(dataconnect, { id: profile.id, fullName, email: profileEmail, phone: profilePhone })
       setProfileSaved(true)
       setTimeout(() => setProfileSaved(false), 3000)
     } catch {
@@ -195,10 +189,7 @@ export default function Settings() {
     setOrgSaved(false)
     setOrgError(false)
     try {
-      await supabase
-        .from('orgs')
-        .update({ name: orgName })
-        .eq('id', org.id)
+      await updateOrgBranding(dataconnect, { id: org.id, name: orgName })
       setOrgSaved(true)
       setTimeout(() => setOrgSaved(false), 3000)
     } catch {
@@ -223,10 +214,8 @@ export default function Settings() {
         returnUrl: window.location.href,
         refreshUrl: window.location.href,
       })
-      await supabase
-        .from('org_settings')
-        .upsert({ org_id: org.id, stripe_account_id: result.data.accountId }, { onConflict: 'org_id' })
-        
+      await updateOrgSettings(dataconnect, { orgId: org.id, stripeAccountId: result.data.accountId })
+      
       window.location.href = result.data.url
     } catch (err) {
       console.error(err)

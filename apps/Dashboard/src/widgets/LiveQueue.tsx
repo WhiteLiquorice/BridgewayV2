@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgQueue, createQueueEntry, updateQueueStatus, deleteQueueEntry, getActiveServices } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
 import EmptyState from '../components/EmptyState'
@@ -22,37 +23,22 @@ export default function LiveQueue() {
   const loadQueue = useCallback(async () => {
     if (!orgId) return
     try {
-      // Query queue entries without FK join on profiles (no foreign key exists)
-      const { data, error: err } = await supabase
-        .from('queue_entries')
-        .select('*, client:clients!client_id(name), service:services!service_id(name)')
-        .eq('org_id', orgId)
-        .in('status', ['waiting', 'serving'])
-        .order('position')
-        .order('joined_at')
-
-      if (err) throw err
-
-      // Look up staff names separately for entries that have staff_id
-      const staffIds = [...new Set((data || []).filter(e => e.staff_id).map(e => e.staff_id))]
-      let staffMap = {}
-      if (staffIds.length > 0) {
-        const { data: staffData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', staffIds)
-        if (staffData) {
-          staffData.forEach(s => { staffMap[s.id] = s.full_name })
-        }
-      }
-
-      // Attach staff names to entries
-      const enriched = (data || []).map(e => ({
-        ...e,
-        staff: e.staff_id ? { full_name: staffMap[e.staff_id] || null } : null,
+      const { data } = await getOrgQueue(dataconnect, { orgId })
+      const enriched = (data?.queueEntries || []).map((e: any) => ({
+        id: e.id,
+        client_name: e.clientName,
+        joined_at: e.joinedAt,
+        called_at: e.calledAt,
+        completed_at: e.completedAt,
+        status: e.status,
+        position: e.position,
+        notes: e.notes,
+        client: e.client,
+        service: e.service,
+        staff: e.staff ? { full_name: e.staff.fullName } : null,
       }))
       setEntries(enriched)
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
@@ -63,37 +49,19 @@ export default function LiveQueue() {
     loadQueue()
   }, [loadQueue])
 
-  // Realtime subscription
+  // Polling for live queue updates instead of Supabase realtime channel
   useEffect(() => {
     if (!orgId) return
-
-    const channel = supabase
-      .channel('queue-realtime')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'queue_entries',
-        filter: `org_id=eq.${orgId}`,
-      }, () => {
-        loadQueue()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    const interval = setInterval(loadQueue, 5000)
+    return () => clearInterval(interval)
   }, [orgId, loadQueue])
 
   // Load services for add form
   useEffect(() => {
     if (!orgId) return
-    supabase
-      .from('services')
-      .select('id, name')
-      .eq('org_id', orgId)
-      .eq('is_archived', false)
-      .order('name')
-      .then(({ data }) => setServices(data || []))
+    getActiveServices(dataconnect, { orgId })
+      .then(({ data }) => setServices((data?.services || []) as any))
+      .catch(() => setServices([]))
   }, [orgId])
 
   async function addToQueue(e) {
@@ -103,25 +71,22 @@ export default function LiveQueue() {
     try {
       // Get next position
       const maxPos = entries.reduce((max, e) => Math.max(max, e.position || 0), 0)
-      const { error: err } = await supabase
-        .from('queue_entries')
-        .insert({
-          org_id: orgId,
-          client_name: newName.trim(),
-          service_id: selectedService || null,
-          notes: newNotes.trim() || null,
-          position: maxPos + 1,
-          status: 'waiting',
-        })
+      await createQueueEntry(dataconnect, {
+        orgId: orgId,
+        clientName: newName.trim(),
+        serviceId: selectedService || null,
+        status: 'waiting',
+        position: maxPos + 1,
+      })
 
-      if (err) throw err
       setNewName('')
       setSelectedService('')
       setNewNotes('')
       setShowAdd(false)
+      loadQueue()
       logActivity({ org_id: orgId, action: 'queue.added', entity_type: 'queue', metadata: { client_name: newName.trim() } })
       showToast('Added to queue', 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     } finally {
       setAdding(false)
@@ -130,42 +95,41 @@ export default function LiveQueue() {
 
   async function callNext(entryId) {
     try {
-      const { error: err } = await supabase
-        .from('queue_entries')
-        .update({ status: 'serving', called_at: new Date().toISOString() })
-        .eq('id', entryId)
-
-      if (err) throw err
+      await updateQueueStatus(dataconnect, {
+        id: entryId,
+        status: 'serving',
+        calledAt: new Date().toISOString(),
+      })
+      loadQueue()
       showToast('Client called', 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }
 
   async function completeEntry(entryId) {
     try {
-      const { error: err } = await supabase
-        .from('queue_entries')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', entryId)
-
-      if (err) throw err
+      await updateQueueStatus(dataconnect, {
+        id: entryId,
+        status: 'completed',
+        completedAt: new Date().toISOString(),
+      })
+      loadQueue()
       showToast('Completed', 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }
 
   async function markNoShow(entryId) {
     try {
-      const { error: err } = await supabase
-        .from('queue_entries')
-        .update({ status: 'no_show' })
-        .eq('id', entryId)
-
-      if (err) throw err
+      await updateQueueStatus(dataconnect, {
+        id: entryId,
+        status: 'no_show',
+      })
+      loadQueue()
       showToast('Marked no show', 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }
@@ -293,7 +257,7 @@ export default function LiveQueue() {
                     className="text-xs bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 px-2 py-1 rounded transition-colors">
                     Call
                   </button>
-                  <button onClick={() => markNoShow(e.id)}
+                  <button onClick={() => deleteQueueEntry(dataconnect, { id: e.id }).then(() => loadQueue())}
                     className="text-xs text-gray-500 hover:text-gray-400 px-1 py-1">
                     ✕
                   </button>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getClientsForRetention, getCompletedAppointmentsForRetention } from '@bridgeway/database'
 import EmptyState from '../components/EmptyState'
 
 export default function ClientRetention() {
@@ -26,60 +27,68 @@ export default function ClientRetention() {
         const sixtyDaysAgo = new Date()
         sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
 
-        const { data: allClients, error: cErr } = await supabase
-          .from('clients')
-          .select('id, name, email, phone, date_of_birth')
-          .eq('org_id', orgId)
-          .order('name')
-
-        if (cErr) throw cErr
+        const { data: clientRes } = await getClientsForRetention(dataconnect, { orgId })
+        const allClients = (clientRes?.clients || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          date_of_birth: c.dateOfBirth,
+        }))
 
         // Get latest appointment per client
-        const { data: recentAppts, error: aErr } = await supabase
-          .from('appointments')
-          .select('client_id, scheduled_at')
-          .eq('org_id', orgId)
-          .eq('status', 'completed')
-          .order('scheduled_at', { ascending: false })
-
-        if (aErr) throw aErr
+        const { data: apptRes } = await getCompletedAppointmentsForRetention(dataconnect, { orgId })
+        const recentAppts = (apptRes?.appointments || []).map((a: any) => ({
+          client_id: a.client?.id,
+          scheduled_at: a.scheduledAt,
+        }))
 
         // Build map of latest appointment per client
         const latestMap = {}
-        ;(recentAppts || []).forEach(a => {
-          if (!latestMap[a.client_id]) latestMap[a.client_id] = a.scheduled_at
+        recentAppts.forEach(a => {
+          if (a.client_id && !latestMap[a.client_id]) {
+            latestMap[a.client_id] = a.scheduled_at
+          }
         })
 
         // Win-back: no visit in 60+ days or never visited
-        const wb = (allClients || []).filter(c => {
-          const last = latestMap[c.id]
-          if (!last) return true // never visited
-          return new Date(last) < sixtyDaysAgo
-        }).map(c => ({
-          ...c,
-          lastVisit: latestMap[c.id] || null,
-          daysSince: latestMap[c.id] ? Math.round((Date.now() - new Date(latestMap[c.id]).getTime()) / 86400000) : null,
-        })).sort((a, b) => (a.daysSince || 999) - (b.daysSince || 999)).slice(0, 20)
+        const wb = allClients
+          .filter(c => {
+            const last = latestMap[c.id]
+            if (!last) return true // never visited
+            return new Date(last) < sixtyDaysAgo
+          })
+          .map(c => ({
+            ...c,
+            lastVisit: latestMap[c.id] || null,
+            daysSince: latestMap[c.id] ? Math.round((Date.now() - new Date(latestMap[c.id]).getTime()) / 86400000) : null,
+          }))
+          .sort((a, b) => (a.daysSince || 999) - (b.daysSince || 999))
+          .slice(0, 20)
 
         // Birthdays this month
         const now = new Date()
         const currentMonth = now.getMonth() + 1
-        const bdays = (allClients || []).filter(c => {
-          if (!c.date_of_birth) return false
-          const month = parseInt(c.date_of_birth.split('-')[1])
-          return month === currentMonth
-        }).sort((a, b) => {
-          const dayA = parseInt(a.date_of_birth.split('-')[2])
-          const dayB = parseInt(b.date_of_birth.split('-')[2])
-          return dayA - dayB
-        })
+        const bdays = allClients
+          .filter(c => {
+            if (!c.date_of_birth) return false
+            const month = parseInt(c.date_of_birth.split('-')[1])
+            return month === currentMonth
+          })
+          .sort((a, b) => {
+            const dayA = parseInt(a.date_of_birth.split('-')[2])
+            const dayB = parseInt(b.date_of_birth.split('-')[2])
+            return dayA - dayB
+          })
 
         // Top clients by appointment count, with last visit date
         const countMap = {}
-        ;(recentAppts || []).forEach(a => {
-          countMap[a.client_id] = (countMap[a.client_id] || 0) + 1
+        recentAppts.forEach(a => {
+          if (a.client_id) {
+            countMap[a.client_id] = (countMap[a.client_id] || 0) + 1
+          }
         })
-        const top = (allClients || [])
+        const top = allClients
           .map(c => ({ ...c, visits: countMap[c.id] || 0, lastVisit: latestMap[c.id] || null }))
           .filter(c => c.visits > 0)
           .sort((a, b) => b.visits - a.visits)
@@ -90,7 +99,7 @@ export default function ClientRetention() {
           setBirthdays(bdays)
           setTopClients(top)
         }
-      } catch (err) {
+      } catch (err: any) {
         if (!cancelled) setError(err.message)
       } finally {
         if (!cancelled) setLoading(false)

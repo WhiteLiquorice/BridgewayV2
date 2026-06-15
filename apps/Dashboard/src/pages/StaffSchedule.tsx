@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgProfiles, getStaffShifts, createStaffShift, deleteStaffShift } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import Modal from '../components/Modal'
 
@@ -48,15 +49,22 @@ export default function StaffSchedule() {
   async function loadData() {
     setLoading(true)
     try {
-      const [staffRes, shiftRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, role, email')
-          .eq('org_id', profile.org_id).in('role', ['admin', 'manager', 'staff']).eq('is_active', true).order('full_name'),
-        supabase.from('staff_shifts').select('*')
-          .eq('org_id', profile.org_id).gte('shift_date', weekStart).lte('shift_date', weekEnd)
-          .order('start_time'),
+      const [profilesRes, shiftsRes] = await Promise.all([
+        getOrgProfiles(dataconnect, { orgId: profile.org_id }),
+        getStaffShifts(dataconnect, { orgId: profile.org_id, start: weekStart, end: weekEnd })
       ])
-      setStaff(staffRes.data || [])
-      setShifts(shiftRes.data || [])
+      setStaff((profilesRes.data?.profiles || [])
+        .filter((p: any) => p.isActive && ['admin', 'manager', 'staff'].includes(p.role))
+        .map((p: any) => ({ id: p.id, full_name: p.fullName, role: p.role, email: p.email })))
+      setShifts((shiftsRes.data?.staffShifts || []).map((s: any) => ({
+        id: s.id,
+        staff_id: s.staff?.id,
+        shift_date: s.shiftDate,
+        start_time: s.startTime,
+        end_time: s.endTime,
+        notes: s.notes,
+        profiles: s.staff ? { full_name: s.staff.fullName } : null
+      })))
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }
@@ -66,20 +74,19 @@ export default function StaffSchedule() {
     if (!form.staff_id || !form.shift_date) return
     setSaving(true)
     try {
-      const { error } = await supabase.from('staff_shifts').insert({
-        org_id: profile.org_id,
-        staff_id: form.staff_id,
-        shift_date: form.shift_date,
-        start_time: form.start_time,
-        end_time: form.end_time,
+      await createStaffShift(dataconnect, {
+        orgId: profile.org_id,
+        staffId: form.staff_id,
+        shiftDate: form.shift_date,
+        startTime: form.start_time,
+        endTime: form.end_time,
         notes: form.notes.trim() || null,
       })
-      if (error) throw error
       showToast('Shift added', 'success')
       setShowAdd(false)
       setForm({ staff_id: '', shift_date: '', start_time: '09:00', end_time: '17:00', notes: '' })
       loadData()
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     } finally {
       setSaving(false)
@@ -88,7 +95,7 @@ export default function StaffSchedule() {
 
   async function deleteShift(shiftId) {
     try {
-      await supabase.from('staff_shifts').delete().eq('id', shiftId)
+      await deleteStaffShift(dataconnect, { id: shiftId })
       showToast('Shift removed', 'success')
       loadData()
     } catch { /* ignore */ }

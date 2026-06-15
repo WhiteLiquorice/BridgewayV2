@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getClasses, getClassRegistrationsForAttendance, updateClassRegistrationStatus } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import EmptyState from '../components/EmptyState'
 
@@ -19,7 +20,6 @@ export default function ClassSchedule() {
   const { profile } = useAuth()
   const { showToast } = useToast()
   const [classes, setClasses] = useState([])
-  const [registrations, setRegistrations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedClass, setSelectedClass] = useState(null)
@@ -40,17 +40,21 @@ export default function ClassSchedule() {
       setLoading(true)
       setError(null)
       try {
-        const { data: cls, error: clsErr } = await supabase
-          .from('classes')
-          .select('*, instructor:profiles!instructor_id(full_name)')
-          .eq('org_id', orgId)
-          .eq('is_active', true)
-          .order('day_of_week')
-          .order('start_time')
-
-        if (clsErr) throw clsErr
-        if (!cancelled) setClasses(cls || [])
-      } catch (err) {
+        const { data } = await getClasses(dataconnect, { orgId })
+        const list = (data?.classes || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          day_of_week: c.dayOfWeek,
+          start_time: c.startTime,
+          duration_minutes: c.durationMinutes,
+          capacity: c.capacity,
+          location: c.location,
+          instructor: c.instructor ? { full_name: c.instructor.fullName } : null,
+          isActive: c.isActive,
+        }))
+        if (!cancelled) setClasses(list.filter(c => c.isActive))
+      } catch (err: any) {
         if (!cancelled) setError(err.message)
       } finally {
         if (!cancelled) setLoading(false)
@@ -66,7 +70,7 @@ export default function ClassSchedule() {
     const map = {}
     for (let i = 0; i < 7; i++) map[i] = []
     classes.forEach(c => {
-      if (map[c.day_of_week]) map[c.day_of_week].push(c)
+      if (map[c.day_of_week] !== undefined) map[c.day_of_week].push(c)
     })
     return map
   }, [classes])
@@ -79,16 +83,18 @@ export default function ClassSchedule() {
     async function loadAttendance() {
       setLoadingAttendees(true)
       try {
-        const { data, error: err } = await supabase
-          .from('class_registrations')
-          .select('*, client:clients!client_id(name, email, phone)')
-          .eq('org_id', orgId)
-          .eq('class_id', selectedClass.id)
-          .eq('class_date', attendanceDate)
-          .order('created_at')
-
-        if (err) throw err
-        if (!cancelled) setAttendees(data || [])
+        const { data } = await getClassRegistrationsForAttendance(dataconnect, {
+          orgId,
+          classId: selectedClass.id,
+          classDate: attendanceDate,
+        })
+        const list = (data?.classRegistrations || []).map((reg: any) => ({
+          id: reg.id,
+          status: reg.status,
+          created_at: reg.createdAt,
+          client: reg.client ? { name: reg.client.name, email: reg.client.email, phone: reg.client.phone } : null,
+        }))
+        if (!cancelled) setAttendees(list)
       } catch {
         if (!cancelled) setAttendees([])
       } finally {
@@ -102,15 +108,10 @@ export default function ClassSchedule() {
 
   async function markAttendance(regId, newStatus) {
     try {
-      const { error: err } = await supabase
-        .from('class_registrations')
-        .update({ status: newStatus })
-        .eq('id', regId)
-
-      if (err) throw err
+      await updateClassRegistrationStatus(dataconnect, { id: regId, status: newStatus })
       setAttendees(prev => prev.map(a => a.id === regId ? { ...a, status: newStatus } : a))
       showToast(`Marked as ${newStatus}`, 'success')
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }
@@ -202,7 +203,7 @@ export default function ClassSchedule() {
       {/* Compact day tabs showing today first */}
       <div className="grid grid-cols-7 gap-1">
         {DAYS.map((day, i) => {
-          const count = byDay[i].length
+          const count = byDay[i]?.length || 0
           return (
             <div key={i} className={`text-center text-xs py-1 rounded ${
               i === today ? 'bg-brand/20 text-brand font-medium' : 'text-gray-500'
@@ -215,7 +216,7 @@ export default function ClassSchedule() {
 
       {/* Today's classes expanded */}
       <div className="space-y-1.5">
-        {byDay[today].length === 0 ? (
+        {(byDay[today]?.length || 0) === 0 ? (
           <p className="text-xs text-gray-600 text-center py-2">No classes today</p>
         ) : (
           byDay[today].map(cls => (
@@ -243,7 +244,7 @@ export default function ClassSchedule() {
       {/* Other days summary */}
       <div className="space-y-1">
         {[1, 2, 3, 4, 5, 6, 0].filter(d => d !== today).map(d => {
-          if (byDay[d].length === 0) return null
+          if ((byDay[d]?.length || 0) === 0) return null
           return (
             <div key={d} className="text-xs text-gray-500 px-1">
               <span className="font-medium text-gray-400">{DAYS[d]}:</span>{' '}

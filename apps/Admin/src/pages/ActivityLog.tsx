@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgProfiles, getOrgActivityLogs } from '@bridgeway/database'
 
 const PAGE_SIZE = 25
 
@@ -49,10 +50,29 @@ const ACTION_ICONS = {
 export default function ActivityLog() {
   const { profile } = useAuth()
   const [logs, setLogs] = useState([])
-  const [total, setTotal] = useState(0)
+  const [profilesMap, setProfilesMap] = useState({})
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
   const fetchGen = useRef(0)
+
+  useEffect(() => {
+    if (!profile?.org_id) return
+    getOrgProfiles(dataconnect, { orgId: profile.org_id })
+      .then(({ data }) => {
+        const map = {}
+        ;(data?.profiles || []).forEach((p: any) => {
+          if (p.userId) {
+            map[p.userId] = {
+              full_name: p.fullName,
+              email: p.email,
+            }
+          }
+        })
+        setProfilesMap(map)
+      })
+      .catch(() => setProfilesMap({}))
+  }, [profile?.org_id])
 
   useEffect(() => {
     if (!profile?.org_id) return
@@ -63,25 +83,39 @@ export default function ActivityLog() {
     const gen = ++fetchGen.current
     setLoading(true)
     try {
-      const { data, count } = await supabase
-        .from('activity_log')
-        .select('id, action, meta, created_at, user_id, profiles(full_name, email)', { count: 'exact' })
-        .eq('org_id', profile.org_id)
-        .order('created_at', { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+      // Query one extra item to check if there is a next page
+      const { data } = await getOrgActivityLogs(dataconnect, {
+        orgId: profile.org_id,
+        limit: PAGE_SIZE + 1,
+        offset: page * PAGE_SIZE,
+      })
+
       if (gen !== fetchGen.current) return
-      setLogs(data || [])
-      setTotal(count || 0)
+
+      const fetchedLogs = (data?.activityLogs || []).map((log: any) => ({
+        id: log.id,
+        action: log.action,
+        meta: log.metadata,
+        created_at: log.createdAt,
+        user_id: log.userId,
+        profiles: profilesMap[log.userId] || null,
+      }))
+
+      if (fetchedLogs.length > PAGE_SIZE) {
+        setHasMore(true)
+        setLogs(fetchedLogs.slice(0, PAGE_SIZE))
+      } else {
+        setHasMore(false)
+        setLogs(fetchedLogs)
+      }
     } catch {
       if (gen !== fetchGen.current) return
       setLogs([])
-      setTotal(0)
+      setHasMore(false)
     } finally {
       if (gen === fetchGen.current) setLoading(false)
     }
   }
-
-  const totalPages = Math.ceil(total / PAGE_SIZE)
 
   function getIcon(action) {
     const category = action?.split('.')[0]
@@ -99,7 +133,7 @@ export default function ActivityLog() {
     <div className="p-6 space-y-5">
       <div>
         <h1 className="text-xl font-semibold text-white">Activity Log</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{total} events recorded</p>
+        <p className="text-sm text-gray-500 mt-0.5">Events recorded</p>
       </div>
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -117,31 +151,34 @@ export default function ActivityLog() {
           </div>
         ) : (
           <div className="divide-y divide-gray-800/60">
-            {logs.map(log => (
-              <div key={log.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
-                <div className="flex-shrink-0 mt-0.5">{getIcon(log.action)}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-200">
-                    <span className="font-medium">{log.profiles?.full_name || log.profiles?.email || 'System'}</span>
-                    {' '}
-                    <span className="text-gray-400">{ACTION_LABELS[log.action] || log.action}</span>
-                  </p>
-                  {log.meta && Object.keys(log.meta).length > 0 && (
-                    <p className="text-xs text-gray-600 mt-0.5 truncate">
-                      {JSON.stringify(log.meta).slice(0, 120)}
+            {logs.map(log => {
+              const matchedProfile = log.profiles || profilesMap[log.user_id]
+              return (
+                <div key={log.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                  <div className="flex-shrink-0 mt-0.5">{getIcon(log.action)}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-200">
+                      <span className="font-medium">{matchedProfile?.full_name || matchedProfile?.email || 'System'}</span>
+                      {' '}
+                      <span className="text-gray-400">{ACTION_LABELS[log.action] || log.action}</span>
                     </p>
-                  )}
+                    {log.meta && Object.keys(log.meta).length > 0 && (
+                      <p className="text-xs text-gray-600 mt-0.5 truncate">
+                        {JSON.stringify(log.meta).slice(0, 120)}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-600 flex-shrink-0 whitespace-nowrap">{formatTime(log.created_at)}</span>
                 </div>
-                <span className="text-xs text-gray-600 flex-shrink-0 whitespace-nowrap">{formatTime(log.created_at)}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
-        {totalPages > 1 && (
+        {(page > 0 || hasMore) && (
           <div className="px-5 py-4 border-t border-gray-800 flex items-center justify-between">
             <p className="text-sm text-gray-500">
-              Page {page + 1} of {totalPages}
+              Page {page + 1}
             </p>
             <div className="flex gap-2">
               <button
@@ -152,8 +189,8 @@ export default function ActivityLog() {
                 Previous
               </button>
               <button
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
+                onClick={() => setPage(p => p + 1)}
+                disabled={!hasMore}
                 className="px-3 py-1.5 text-sm rounded-lg border border-gray-700 text-gray-400 hover:text-white hover:border-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next

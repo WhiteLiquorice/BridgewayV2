@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { auth as firebaseAuth, dataconnect } from '../lib/firebase'
 import { onAuthStateChanged } from 'firebase/auth'
-import { getUserProfile } from '@bridgeway/database'
+import { getUserProfile, getClientByEmail } from '@bridgeway/database'
 
 const AuthContext = createContext<any>(null)
 
@@ -9,10 +9,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession]   = useState<any>(null)
   const [profile, setProfile]   = useState<any>(null)
   const [org, setOrg]           = useState<any>(null)
+  const [clientId, setClientId] = useState<string | null>(null)
+  const [client, setClient]     = useState<any>(null)
   const [loading, setLoading]   = useState(true)
 
   async function loadProfile(userId: string | null) {
-    if (!userId) { setProfile(null); setOrg(null); return }
+    if (!userId) { 
+      setProfile(null); 
+      setOrg(null); 
+      setClientId(null); 
+      setClient(null);
+      return 
+    }
     try {
       const { data } = await getUserProfile(dataconnect);
       const prof = data.profiles[0];
@@ -31,13 +39,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           session_timeout_admin_min: 480,
           session_timeout_patient_min: 480,
         });
+        
+        if (prof.org.id && prof.email) {
+          const clientRes = await getClientByEmail(dataconnect, { orgId: prof.org.id, email: prof.email });
+          const clientObj = clientRes.data.clients[0];
+          if (clientObj) {
+            setClientId(clientObj.id);
+            setClient(clientObj);
+          } else {
+            setClientId(null);
+            setClient(null);
+          }
+        } else {
+          setClientId(null);
+          setClient(null);
+        }
       } else {
         setProfile(null)
         setOrg(null)
+        setClientId(null)
+        setClient(null)
       }
     } catch (err) {
       console.error("Error loading profile:", err);
-      // Network error — leave any existing profile/org in place
+      // Network error — leave any existing profile/org/client in place
     }
   }
 
@@ -50,6 +75,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null); 
         setProfile(null); 
         setOrg(null); 
+        setClientId(null);
+        setClient(null);
       }
       setLoading(false)
     })
@@ -79,6 +106,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       org?.session_timeout_staff_min, org?.session_timeout_manager_min,
       org?.session_timeout_admin_min, org?.session_timeout_patient_min])
 
+  async function signOut() {
+    await firebaseAuth.signOut()
+  }
+
   return (
     <AuthContext.Provider value={{
       session,
@@ -86,6 +117,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profile,
       org,
       role: profile?.role ?? null,
+      clientId,
+      client,
+      signOut,
       loading,
     }}>
       {children}

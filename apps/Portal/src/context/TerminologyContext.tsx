@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 
 const DEFAULT_TERMS = {
@@ -18,30 +17,25 @@ export function TerminologyProvider({ children }) {
   useEffect(() => {
     const orgId = profile?.org_id
     if (!orgId) return
-    let cancelled = false
     setLoading(true)
-    ;(async () => {
-      try {
-        const { data } = await supabase
-          .from('org_settings')
-          .select('terminology')
-          .eq('org_id', orgId)
-          .maybeSingle()
-        if (cancelled) return
-        if (data?.terminology) {
-          setTerms({
-            client:      { ...DEFAULT_TERMS.client,      ...(data.terminology.client      || {}) },
-            appointment: { ...DEFAULT_TERMS.appointment, ...(data.terminology.appointment || {}) },
-            staff:       { ...DEFAULT_TERMS.staff,       ...(data.terminology.staff       || {}) },
-          })
-        } else {
-          setTerms(DEFAULT_TERMS)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
+    try {
+      const stored = localStorage.getItem('bw_terminology_' + orgId)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        setTerms({
+          client:      { ...DEFAULT_TERMS.client,      ...(parsed.client      || {}) },
+          appointment: { ...DEFAULT_TERMS.appointment, ...(parsed.appointment || {}) },
+          staff:       { ...DEFAULT_TERMS.staff,       ...(parsed.staff       || {}) },
+        })
+      } else {
+        setTerms(DEFAULT_TERMS)
       }
-    })()
-    return () => { cancelled = true }
+    } catch (err) {
+      console.error('Failed to load terminology:', err)
+      setTerms(DEFAULT_TERMS)
+    } finally {
+      setLoading(false)
+    }
   }, [profile?.org_id])
 
   return (

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
-import { supabase } from '../../lib/supabase'
+import { dataconnect } from '../../lib/firebase'
+import { getAvailableSlotsForBooking, getActiveServices, getOrgById, getOrgSettings, getActiveClassesForBooking, getExistingRegistration, getClassRegistrationsCount, createClassRegistration, createBooking } from '@bridgeway/database'
 import StripePayment from '../../components/StripePayment'
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -41,7 +42,7 @@ function StepIndicator({ total, current }) {
 }
 
 export default function BookAppointment() {
-  const { profile, user } = useAuth()
+  const { profile, user, clientId } = useAuth()
   const { primaryColor } = useTheme()
 
   // Flow type: 'appointment' | 'class'
@@ -80,33 +81,44 @@ export default function BookAppointment() {
     async function loadData() {
       setLoadingData(true)
       try {
-        const [{ data: slotData }, { data: svcData }] = await Promise.all([
-          supabase.from('slots')
-            .select('id, start_time, end_time, staff_id, profiles(full_name)')
-            .eq('org_id', profile.org_id)
-            .eq('status', 'available')
-            .gte('start_time', new Date().toISOString())
-            .order('start_time')
-            .limit(60),
-          supabase.from('services')
-            .select('id, name, duration_minutes, price, description')
-            .eq('org_id', profile.org_id)
-            .eq('is_archived', false)
-            .order('name'),
+        const [slotsRes, svcRes, orgRes, settingsRes] = await Promise.all([
+          getAvailableSlotsForBooking(dataconnect, { orgId: profile.org_id, now: new Date().toISOString() }),
+          getActiveServices(dataconnect, { orgId: profile.org_id }),
+          getOrgById(dataconnect, { id: profile.org_id }),
+          getOrgSettings(dataconnect, { orgId: profile.org_id })
         ])
-        setSlots(slotData || [])
-        setServices(svcData || [])
-        const { data: orgInfo } = await supabase.from('orgs')
-          .select('id, stripe_publishable_key').eq('id', profile.org_id).single()
+        
+        const mappedSlots = (slotsRes.data.slots || []).map((s: any) => ({
+          ...s,
+          start_time: s.startTime,
+          end_time: s.endTime,
+          staff_id: s.staff?.id || null,
+          profiles: s.staff ? { full_name: s.staff.fullName } : null
+        }))
+        
+        const mappedServices = (svcRes.data.services || []).map((s: any) => ({
+          ...s,
+          duration_minutes: s.durationMinutes
+        }))
+
+        setSlots(mappedSlots as any)
+        setServices(mappedServices as any)
+
+        const orgInfo = orgRes.data.org
         if (orgInfo) {
-          setOrgData(orgInfo)
-          if (orgInfo.stripe_publishable_key) {
-            const { data: settings } = await supabase.from('org_settings')
-              .select('payment_required').eq('org_id', profile.org_id).maybeSingle()
-            if (settings?.payment_required) setPaymentRequired(true)
+          setOrgData({
+            ...orgInfo,
+            stripe_publishable_key: orgInfo.stripePublishableKey
+          } as any)
+          
+          const settings = settingsRes.data.orgSettings[0]
+          if (settings?.paymentRequired) {
+            setPaymentRequired(true)
           }
         }
-      } catch { /* ignore */ } finally {
+      } catch (err) {
+        console.error(err)
+      } finally {
         setLoadingData(false)
       }
     }
@@ -118,13 +130,15 @@ export default function BookAppointment() {
     async function loadClasses() {
       setLoadingClasses(true)
       try {
-        const { data } = await supabase.from('classes')
-          .select('id, name, description, day_of_week, start_time, duration_minutes, capacity, location, instructor:profiles!instructor_id(full_name)')
-          .eq('org_id', profile.org_id)
-          .eq('is_active', true)
-          .order('day_of_week')
-          .order('start_time')
-        setClasses(data || [])
+        const res = await getActiveClassesForBooking(dataconnect, { orgId: profile.org_id })
+        const mapped = (res.data.classes || []).map((c: any) => ({
+          ...c,
+          day_of_week: c.dayOfWeek,
+          start_time: c.startTime,
+          duration_minutes: c.durationMinutes,
+          instructor: c.instructor ? { full_name: c.instructor.fullName } : null
+        }))
+        setClasses(mapped as any)
       } catch { /* ignore */ } finally {
         setLoadingClasses(false)
       }
@@ -133,7 +147,7 @@ export default function BookAppointment() {
   }, [profile?.org_id])
 
   async function handleSubmitAppointment() {
-    if (!selectedSlot || !selectedService) return
+    if (!selectedSlot || !selectedService || !profile?.org_id) return
     if (paymentRequired && Number(selectedService.price) > 0 && !paymentDone) {
       setShowPayment(true)
       return
@@ -141,67 +155,58 @@ export default function BookAppointment() {
     setError(null)
     setSubmitting(true)
     try {
-      const payload = {
-        org_id:     profile.org_id,
-        service_id: selectedService.id,
-        slot_id:    selectedSlot.id,
-        name:       profile.full_name || '',
-        email:      profile.email || user?.email || '',
-        phone:      profile.phone || null,
-        notes:      notes.trim() || null,
-        status:     'pending',
-      }
-      if (paymentDone) payload.payment_status = 'paid'
-      const { error: err } = await supabase.from('bookings').insert(payload)
-      if (err) { setError(err.message); return }
-      setSlots(prev => prev.filter(s => s.id !== selectedSlot.id))
+      await createBooking(dataconnect, {
+        orgId: profile.org_id,
+        serviceId: selectedService.id,
+        slotId: selectedSlot.id,
+        name: profile.full_name || '',
+        email: profile.email || user?.email || '',
+        phone: profile.phone || null,
+        notes: notes.trim() || null,
+        status: 'pending',
+        paymentStatus: paymentDone ? 'paid' : null,
+        preferredDate: null,
+        preferredTime: null
+      })
+      setSlots((prev: any) => prev.filter((s: any) => s.id !== selectedSlot.id))
       setSubmitted(true)
-    } catch {
-      setError('Failed to submit — check your connection and try again.')
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit — check your connection and try again.')
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleSubmitClass() {
-    if (!selectedClass || !classDate) return
+    if (!selectedClass || !classDate || !clientId || !profile?.org_id) return
     setClassError(null)
     setClassSubmitting(true)
     try {
-      const { data: clientData } = await supabase.from('clients')
-        .select('id')
-        .eq('org_id', profile.org_id)
-        .eq('email', profile.email || user?.email)
-        .maybeSingle()
-      if (!clientData) { setClassError('No client record found. Please contact the office.'); return }
-
-      const { data: existing } = await supabase.from('class_registrations')
-        .select('id')
-        .eq('class_id', selectedClass.id)
-        .eq('client_id', clientData.id)
-        .eq('class_date', classDate)
-        .in('status', ['registered', 'waitlisted'])
-        .maybeSingle()
+      const regRes = await getExistingRegistration(dataconnect, {
+        classId: selectedClass.id,
+        clientId: clientId,
+        classDate: classDate
+      })
+      const existing = regRes.data.classRegistrations[0]
       if (existing) { setClassError('You are already registered for this class on this date.'); return }
 
-      const { count } = await supabase.from('class_registrations')
-        .select('id', { count: 'exact', head: true })
-        .eq('class_id', selectedClass.id)
-        .eq('class_date', classDate)
-        .eq('status', 'registered')
-      const status = (count || 0) >= (selectedClass.capacity || 10) ? 'waitlisted' : 'registered'
+      const countRes = await getClassRegistrationsCount(dataconnect, {
+        classId: selectedClass.id,
+        classDate: classDate
+      })
+      const count = countRes.data.classRegistrations.length
+      const status = count >= (selectedClass.capacity || 10) ? 'waitlisted' : 'registered'
 
-      const { error: err } = await supabase.from('class_registrations').insert({
-        org_id: profile.org_id,
-        class_id: selectedClass.id,
-        client_id: clientData.id,
-        class_date: classDate,
+      await createClassRegistration(dataconnect, {
+        orgId: profile.org_id,
+        classId: selectedClass.id,
+        clientId: clientId,
+        classDate: classDate,
         status,
       })
-      if (err) { setClassError(err.message); return }
       setClassSubmitted(true)
-    } catch {
-      setClassError('Failed to register — check your connection and try again.')
+    } catch (err: any) {
+      setClassError(err.message || 'Failed to register — check your connection and try again.')
     } finally {
       setClassSubmitting(false)
     }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getFloorLayout, getOrgQueue, assignSeat, clearSeat, getTodayFloorAppointments } from '@bridgeway/database'
 import {
   DndContext,
   DragOverlay,
@@ -134,29 +135,48 @@ export default function TheFloor() {
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
       const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999)
 
-      const [zoneRes, queueRes, assignRes, apptRes] = await Promise.all([
-        supabase.from('floor_zones').select('*').eq('org_id', orgId).order('name'),
-        supabase.from('queue_entries')
-          .select('id, client_name, status, joined_at, service:services!service_id(name)')
-          .eq('org_id', orgId).in('status', ['waiting', 'serving']).order('position'),
-        supabase.from('seat_assignments')
-          .select('id, zone_id, zone_name, queue_entry_id, client_name, assigned_at')
-          .eq('org_id', orgId).is('cleared_at', null),
-        supabase.from('appointments')
-          .select('id, scheduled_at, status, client:clients!client_id(name), service:services!service_id(name), staff:profiles!staff_id(full_name)')
-          .eq('org_id', orgId)
-          .gte('scheduled_at', todayStart.toISOString())
-          .lte('scheduled_at', todayEnd.toISOString())
-          .in('status', ['confirmed', 'arrived', 'with_provider'])
-          .order('scheduled_at'),
+      const [layoutRes, queueRes, apptRes] = await Promise.all([
+        getFloorLayout(dataconnect, { orgId }),
+        getOrgQueue(dataconnect, { orgId }),
+        getTodayFloorAppointments(dataconnect, { orgId, todayStart: todayStart.toISOString(), todayEnd: todayEnd.toISOString() })
       ])
 
-      if (zoneRes.error) throw zoneRes.error
-      setZones(zoneRes.data || [])
-      setQueue(queueRes.data || [])
-      setAssignments(assignRes.data || [])
-      setAppointments(apptRes.data || [])
-    } catch (err) {
+      const zoneList = (layoutRes.data?.floorZones || []).map((z: any) => ({
+        id: z.id,
+        name: z.name,
+        capacity: z.capacity,
+      }))
+      setZones(zoneList)
+
+      const assignList = (layoutRes.data?.seatAssignments || []).map((a: any) => ({
+        id: a.id,
+        zone_id: a.zone?.id,
+        zone_name: a.zoneName,
+        queue_entry_id: a.queueEntry?.id,
+        client_name: a.clientName,
+        assigned_at: a.assignedAt,
+      }))
+      setAssignments(assignList)
+
+      const queueList = (queueRes.data?.queueEntries || []).map((q: any) => ({
+        id: q.id,
+        client_name: q.clientName,
+        status: q.status,
+        joined_at: q.joinedAt,
+        service: q.service ? { name: q.service.name } : null,
+      }))
+      setQueue(queueList)
+
+      const apptList = (apptRes.data?.appointments || []).map((a: any) => ({
+        id: a.id,
+        scheduled_at: a.scheduledAt,
+        status: a.status,
+        client: a.client ? { name: a.client.name } : null,
+        service: a.service ? { name: a.service.name } : null,
+        staff: a.staff ? { full_name: a.staff.fullName } : null,
+      }))
+      setAppointments(apptList)
+    } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
@@ -165,19 +185,9 @@ export default function TheFloor() {
 
   useEffect(() => {
     loadAll()
-    const interval = setInterval(loadAll, 30000)
+    const interval = setInterval(loadAll, 10000)
     return () => clearInterval(interval)
   }, [loadAll])
-
-  // Realtime
-  useEffect(() => {
-    if (!orgId) return
-    const ch = supabase.channel('floor-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'queue_entries', filter: `org_id=eq.${orgId}` }, loadAll)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'seat_assignments', filter: `org_id=eq.${orgId}` }, loadAll)
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, [orgId, loadAll])
 
   // ── Drag handlers ──────────────────────────────────────────────────────────
   function handleDragStart({ active }) {
@@ -197,22 +207,30 @@ export default function TheFloor() {
     if (occupied.length >= (zone.capacity || 1)) return
 
     // Upsert seat assignment
-    await supabase.from('seat_assignments').insert({
-      org_id: orgId,
-      zone_id: zone.id,
-      zone_name: zone.name,
-      queue_entry_id: entry.id,
-      client_name: entry.client_name,
-    })
-
-    loadAll()
+    try {
+      await assignSeat(dataconnect, {
+        orgId: orgId,
+        zoneId: zone.id,
+        zoneName: zone.name,
+        queueEntryId: entry.id,
+        clientName: entry.client_name,
+      })
+      loadAll()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   async function handleClearSeat(assignmentId) {
-    await supabase.from('seat_assignments')
-      .update({ cleared_at: new Date().toISOString() })
-      .eq('id', assignmentId)
-    loadAll()
+    try {
+      await clearSeat(dataconnect, {
+        id: assignmentId,
+        clearedAt: new Date().toISOString(),
+      })
+      loadAll()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   // ── Active drag overlay card ───────────────────────────────────────────────
@@ -379,13 +397,13 @@ export default function TheFloor() {
               <div className="text-xs text-brand uppercase tracking-wider font-medium mb-1.5 px-1">Queue</div>
               <div className="space-y-1">
                 {queueWaiting.map((q, i) => {
-                  const waitMin = Math.round((Date.now() - new Date(q.joined_at).getTime()) / 60000)
+                  const waitTime = Math.round((Date.now() - new Date(q.joined_at).getTime()) / 60000)
                   return (
                     <div key={q.id} className="flex items-center gap-2 text-sm px-1">
                       <span className="text-xs font-mono text-gray-600 w-4 text-right">{i + 1}</span>
                       <span className="text-white">{q.client_name}</span>
                       {q.service?.name && <span className="text-gray-500 text-xs">{q.service.name}</span>}
-                      <span className="text-gray-600 text-xs ml-auto">{waitMin}m</span>
+                      <span className="text-gray-600 text-xs ml-auto">{waitTime}m</span>
                     </div>
                   )
                 })}

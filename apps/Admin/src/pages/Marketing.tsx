@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getMarketingTriggers, createMarketingTrigger, updateMarketingTrigger } from '@bridgeway/database'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,15 +172,29 @@ export default function Marketing() {
     if (!profile?.org_id) return
     setLoading(true)
     try {
-      const { data } = await supabase.from('marketing_triggers').select('*').eq('org_id', profile.org_id)
+      const res = await getMarketingTriggers(dataconnect, { orgId: profile.org_id })
+      const data = res.data.marketingTriggers
       
       if (data && data.length > 0) {
-        setTriggers(data)
+        setTriggers(data as any[])
       } else {
         // Initialize with defaults if none exist
         const initial = DEFAULT_TRIGGERS.map(t => ({ ...t, org_id: profile.org_id }))
-        await supabase.from('marketing_triggers').insert(initial)
-        setTriggers(initial)
+        for (const t of initial) {
+          await createMarketingTrigger(dataconnect, {
+            orgId: profile.org_id,
+            triggerId: t.triggerId,
+            title: t.title,
+            description: t.description || '',
+            channel: t.channel,
+            enabled: t.enabled,
+            delayValue: t.delayValue,
+            delayUnit: t.delayUnit,
+            message: t.message
+          })
+        }
+        const reloadRes = await getMarketingTriggers(dataconnect, { orgId: profile.org_id })
+        setTriggers(reloadRes.data.marketingTriggers as any[])
       }
     } catch (err) {
       console.error(err)
@@ -191,8 +206,19 @@ export default function Marketing() {
   useEffect(() => { loadTriggers() }, [profile?.org_id])
 
   async function handleUpdate(trigger) {
-    const { id, ...payload } = trigger
-    await supabase.from('marketing_triggers').update(payload).eq('org_id', profile.org_id).eq('triggerId', trigger.triggerId)
+    if (!trigger.id) return
+    try {
+      await updateMarketingTrigger(dataconnect, {
+        id: trigger.id,
+        channel: trigger.channel,
+        enabled: trigger.enabled,
+        delayValue: trigger.delayValue,
+        delayUnit: trigger.delayUnit,
+        message: trigger.message
+      })
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   if (loading) return (

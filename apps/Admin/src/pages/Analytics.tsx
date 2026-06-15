@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgPosTransactions, getOrgAppointments } from '@bridgeway/database'
 
 export default function Analytics() {
   const { profile } = useAuth()
@@ -12,19 +13,25 @@ export default function Analytics() {
     if (!profile?.org_id) return
     setLoading(true)
     try {
-      const { data: tx } = await supabase
-        .from('pos_transactions')
-        .select('*')
-        .eq('org_id', profile.org_id)
-        .order('created_at', { ascending: false })
+      const [txRes, apptsRes] = await Promise.all([
+        getOrgPosTransactions(dataconnect, { orgId: profile.org_id }),
+        getOrgAppointments(dataconnect, { orgId: profile.org_id })
+      ])
 
-      const { data: appts } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('org_id', profile.org_id)
+      const tx = (txRes.data?.posTransactions || []).map((t: any) => ({
+        id: t.id,
+        total_cents: t.totalCents,
+        created_at: t.createdAt,
+      }))
 
-      setTransactions(tx || [])
-      setAppointments(appts || [])
+      const appts = (apptsRes.data?.appointments || []).map((a: any) => ({
+        id: a.id,
+        status: a.status,
+        cancellation_reason: a.cancellationReason,
+      }))
+
+      setTransactions(tx)
+      setAppointments(appts)
     } catch (err) {
       console.error(err)
     } finally {

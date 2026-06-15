@@ -21,10 +21,12 @@ export function TerminologyProvider({ children }) {
     if (!orgId) return
     setLoading(true)
     try {
-      const { data } = await getOrgSettings(dataconnect, { orgId })
-      const settings = data?.orgSettings?.[0]
-      // Since terminology is not stored in V2 schema, we use default terms
-      setTerms(DEFAULT_TERMS)
+      const stored = localStorage.getItem('bw_terminology_' + orgId)
+      if (stored) {
+        setTerms(JSON.parse(stored))
+      } else {
+        setTerms(DEFAULT_TERMS)
+      }
     } catch (err) {
       console.error('Failed to load terminology:', err)
       setTerms(DEFAULT_TERMS)

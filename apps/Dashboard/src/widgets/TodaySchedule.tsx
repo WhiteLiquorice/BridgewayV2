@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgAppointments, updateAppointmentStatus } from '@bridgeway/database'
 import { logActivity } from '../lib/logActivity'
 import { STATUS_LABELS, getStatusStyle, getNextStatus, NEXT_ACTION_LABELS, NEXT_ACTION_STYLES } from '../lib/appointmentStatus'
 
@@ -16,39 +17,24 @@ export default function TodaySchedule() {
     fetchToday()
   }, [profile?.org_id])
 
-  useEffect(() => {
-    if (!profile?.org_id) return
-    const channel = supabase
-      .channel('today-schedule-changes')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'appointments',
-      }, () => {
-        fetchToday()
-      })
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [profile?.org_id])
-
   async function fetchToday() {
     setLoading(true)
     setError(false)
-    const today = new Date()
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
-
     try {
-      const { data } = await supabase
-        .from('appointments')
-        .select('id, scheduled_at, status, amount, duration_minutes, clients(name), services(name, duration_minutes)')
-        .eq('org_id', profile.org_id)
-        .gte('scheduled_at', startOfDay)
-        .lte('scheduled_at', endOfDay)
-        .neq('status', 'cancelled')
-        .order('scheduled_at')
-
-      setAppointments(data || [])
+      const { data } = await getOrgAppointments(dataconnect, { orgId: profile.org_id })
+      const todayStr = new Date().toDateString()
+      const list = (data?.appointments || [])
+        .filter((a: any) => new Date(a.scheduledAt).toDateString() === todayStr && a.status !== 'cancelled')
+        .map((a: any) => ({
+          id: a.id,
+          scheduled_at: a.scheduledAt,
+          status: a.status,
+          amount: a.amount,
+          duration_minutes: a.durationMinutes,
+          clients: a.client ? { name: a.client.name } : null,
+          services: a.service ? { name: a.service.name, duration_minutes: a.durationMinutes } : null
+        }))
+      setAppointments(list)
     } catch {
       setError(true)
       setAppointments([])
@@ -62,7 +48,7 @@ export default function TodaySchedule() {
     if (!next) return
     setUpdating(id)
     try {
-      await supabase.from('appointments').update({ status: next }).eq('id', id)
+      await updateAppointmentStatus(dataconnect, { id, status: next })
       setAppointments(prev => prev.map(a => a.id === id ? { ...a, status: next } : a))
       logActivity({ org_id: profile.org_id, user_id: profile.user_id, action: `appointment.status.${next}`, entity_type: 'appointment', entity_id: id })
     } catch { /* silent */ }
@@ -72,7 +58,7 @@ export default function TodaySchedule() {
   async function cancelAppointment(id) {
     setUpdating(id)
     try {
-      await supabase.from('appointments').update({ status: 'cancelled' }).eq('id', id)
+      await updateAppointmentStatus(dataconnect, { id, status: 'cancelled' })
       setAppointments(prev => prev.filter(a => a.id !== id))
       logActivity({ org_id: profile.org_id, user_id: profile.user_id, action: 'appointment.cancelled', entity_type: 'appointment', entity_id: id })
     } catch { /* silent */ }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getClasses, getOrgProfiles, createClass, updateClass, updateClassActiveStatus } from '@bridgeway/database'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
 import Modal from '../components/Modal'
@@ -35,28 +36,36 @@ export default function Classes() {
     if (!orgId) return
     fetchClasses()
     // Load staff for instructor dropdown
-    supabase.from('profiles').select('id, full_name').eq('org_id', orgId).eq('is_active', true)
-      .in('role', ['admin', 'manager', 'staff']).order('full_name')
-      .then(({ data }) => setStaff(data || []))
+    getOrgProfiles(dataconnect, { orgId })
+      .then(({ data }) => setStaff((data?.profiles || [])
+        .filter((p: any) => p.isActive && ['admin', 'manager', 'staff'].includes(p.role))
+        .map((p: any) => ({ id: p.id, full_name: p.fullName }))
+      ))
   }, [orgId])
 
   async function fetchClasses() {
     const gen = ++fetchGen.current
     setLoading(true)
     try {
-      let query = supabase
-        .from('classes')
-        .select('*, instructor:profiles!instructor_id(full_name)')
-        .eq('org_id', orgId)
-        .order('day_of_week')
-        .order('start_time')
-
-      if (dayFilter !== '') query = query.eq('day_of_week', parseInt(dayFilter))
-
-      const { data, error } = await query
-      if (error) throw error
-      if (gen === fetchGen.current) setClasses(data || [])
-    } catch (err) {
+      const { data } = await getClasses(dataconnect, { orgId })
+      if (gen === fetchGen.current) {
+        let list = (data?.classes || []).map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          day_of_week: c.dayOfWeek,
+          start_time: c.startTime,
+          duration_minutes: c.durationMinutes,
+          capacity: c.capacity,
+          location: c.location,
+          is_active: c.isActive,
+          instructor_id: c.instructor?.id,
+          instructor: c.instructor ? { full_name: c.instructor.fullName } : null
+        }))
+        if (dayFilter !== '') list = list.filter(c => c.day_of_week === parseInt(dayFilter))
+        setClasses(list)
+      }
+    } catch (err: any) {
       showToast(err.message, 'error')
     } finally {
       if (gen === fetchGen.current) setLoading(false)
@@ -108,33 +117,38 @@ export default function Classes() {
       let dur = (eh * 60 + em) - (sh * 60 + sm)
       if (dur <= 0) dur += 24 * 60 // handle overnight
 
-      const payload = {
-        org_id: orgId,
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-        instructor_id: form.instructor_id || null,
-        service_id: null,
-        day_of_week: parseInt(form.day_of_week),
-        start_time: form.start_time,
-        duration_minutes: dur,
-        capacity: parseInt(form.capacity),
-        location: form.location.trim() || null,
-      }
-
       if (editing) {
-        const { error } = await supabase.from('classes').update(payload).eq('id', editing.id)
-        if (error) throw error
+        await updateClass(dataconnect, {
+          id: editing.id,
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          instructorId: form.instructor_id || null,
+          dayOfWeek: parseInt(form.day_of_week as any),
+          startTime: form.start_time,
+          durationMinutes: dur,
+          capacity: parseInt(form.capacity as any),
+          location: form.location.trim() || null,
+        })
         showToast('Class updated', 'success')
       } else {
-        const { error } = await supabase.from('classes').insert(payload)
-        if (error) throw error
+        await createClass(dataconnect, {
+          orgId,
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          instructorId: form.instructor_id || null,
+          dayOfWeek: parseInt(form.day_of_week as any),
+          startTime: form.start_time,
+          durationMinutes: dur,
+          capacity: parseInt(form.capacity as any),
+          location: form.location.trim() || null,
+        })
         logActivity({ org_id: orgId, action: 'class.created', entity_type: 'class', metadata: { class_name: form.name.trim() } })
         showToast('Class created', 'success')
       }
 
       setShowModal(false)
       fetchClasses()
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     } finally {
       setSaving(false)
@@ -143,11 +157,10 @@ export default function Classes() {
 
   async function toggleActive(cls) {
     try {
-      const { error } = await supabase.from('classes').update({ is_active: !cls.is_active }).eq('id', cls.id)
-      if (error) throw error
+      await updateClassActiveStatus(dataconnect, { id: cls.id, isActive: !cls.is_active })
       showToast(cls.is_active ? 'Class deactivated' : 'Class reactivated', 'success')
       fetchClasses()
-    } catch (err) {
+    } catch (err: any) {
       showToast(err.message, 'error')
     }
   }

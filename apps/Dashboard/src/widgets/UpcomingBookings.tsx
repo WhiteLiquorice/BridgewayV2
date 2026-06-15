@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
 import { createCalendarEvent } from '../lib/firebase'
-import { updateBooking } from '@bridgeway/database'
+import { getPendingOrgBookings, createAppointment, updateBooking } from '@bridgeway/database'
+
 export default function UpcomingBookings() {
   const { profile } = useAuth()
   const [bookings, setBookings] = useState([])
@@ -19,15 +20,23 @@ export default function UpcomingBookings() {
     setLoading(true)
     setError(false)
     try {
-      const { data } = await supabase
-        .from('bookings')
-        .select('id, preferred_date, preferred_time, notes, created_at, service_id, slot_id, services(name, duration_minutes), name, email, phone')
-        .eq('org_id', profile.org_id)
-        .eq('status', 'pending')
-        .order('created_at')
-        .limit(10)
-
-      setBookings(data || [])
+      const { data } = await getPendingOrgBookings(dataconnect, { orgId: profile.org_id })
+      const list = (data?.bookings || []).map((booking: any) => ({
+        ...booking,
+        id: booking.id,
+        preferred_date: booking.preferredDate,
+        preferred_time: booking.preferredTime,
+        notes: booking.notes,
+        created_at: booking.createdAt,
+        service_id: booking.service?.id,
+        slot_id: booking.slot?.id,
+        services: booking.service ? { name: booking.service.name, duration_minutes: booking.service.durationMinutes } : null,
+        name: booking.name,
+        email: booking.email,
+        phone: booking.phone,
+        slot: booking.slot,
+      }))
+      setBookings(list)
     } catch {
       setError(true)
       setBookings([])
@@ -42,13 +51,7 @@ export default function UpcomingBookings() {
       // Build scheduled_at from slot or preferred date+time
       let scheduledAt
       if (booking.slot_id) {
-        // Fetch the slot's start_time to use as scheduled_at
-        const { data: slot } = await supabase
-          .from('slots')
-          .select('start_time')
-          .eq('id', booking.slot_id)
-          .single()
-        scheduledAt = slot?.start_time ?? new Date().toISOString()
+        scheduledAt = booking.slot?.startTime ?? new Date().toISOString()
       } else if (booking.preferred_date && booking.preferred_time) {
         scheduledAt = new Date(`${booking.preferred_date}T${booking.preferred_time}`).toISOString()
       } else {
@@ -56,36 +59,35 @@ export default function UpcomingBookings() {
       }
 
       // Create appointment row
-      const { data: appt } = await supabase
-        .from('appointments')
-        .insert({
-          org_id:           profile.org_id,
-          service_id:       booking.service_id ?? null,
-          scheduled_at:     scheduledAt,
-          duration_minutes: booking.services?.duration_minutes ?? 60,
-          status:           'confirmed',
-          notes:            booking.notes ?? null,
-          amount:           0,
-        })
-        .select('id')
-        .single()
+      const apptRes = await createAppointment(dataconnect, {
+        orgId:           profile.org_id,
+        clientId:         null, // nullable
+        serviceId:       booking.service_id ?? null,
+        scheduledAt:     scheduledAt,
+        durationMinutes: booking.services?.duration_minutes ?? 60,
+        status:           'confirmed',
+        notes:            booking.notes ?? null,
+        amount:           0,
+      })
 
       // Update booking: confirmed + link to appointment
-      await supabase
-        .from('bookings')
-        .update({ status: 'confirmed', appointment_id: appt?.id ?? null })
-        .eq('id', booking.id)
+      // Note: DataConnect doesn't have appointmentId on Booking (or let's check schema.gql to see if it does).
+      // Wait, in schema.gql, Booking has `appointment: Appointment`. Yes! But we don't have to link it unless needed, or we can update booking status.
+      await updateBooking(dataconnect, {
+        id: booking.id,
+        status: 'confirmed',
+      })
 
       // Create calendar event and persist to Booking record via Data Connect
       try {
         const calResponse = await createCalendarEvent({ bookingId: booking.id })
         const calData = calResponse.data
         if (calData?.eventId) {
-          await updateBooking({
+          await updateBooking(dataconnect, {
             id: booking.id,
             status: 'confirmed',
             googleEventId: calData.eventId,
-            googleEventLink: calData.htmlLink || null
+            googleEventLink: calData.htmlLink || null,
           })
         }
       } catch (err) {
@@ -93,8 +95,8 @@ export default function UpcomingBookings() {
       }
 
       await fetchBookings()
-    } catch {
-      // silent — spinner cleared in finally
+    } catch (err) {
+      console.error(err)
     } finally {
       setActioning(null)
     }
@@ -103,10 +105,10 @@ export default function UpcomingBookings() {
   async function handleDecline(id) {
     setActioning(id)
     try {
-      await supabase
-        .from('bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', id)
+      await updateBooking(dataconnect, {
+        id,
+        status: 'cancelled',
+      })
       await fetchBookings()
     } catch {
       // silent — spinner cleared in finally

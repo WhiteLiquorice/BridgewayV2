@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { supabase } from '../lib/supabase'
+import { dataconnect } from '../lib/firebase'
+import { getOrgServices, getOrgClientPackages, createService, updateService, toggleServiceArchive } from '@bridgeway/database'
 
 // Format price as dollar string
 function formatPrice(price) {
@@ -48,15 +49,15 @@ export default function ServiceCatalog() {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('services')
-        .select('*')
-        .eq('org_id', profile.org_id)
-        .order('name')
-      if (err) { setError(err.message); return }
-      setServices(data || [])
-    } catch {
-      setError('Failed to load services — check your connection.')
+      const res = await getOrgServices(dataconnect, { orgId: profile.org_id })
+      const mapped = (res.data.services || []).map(s => ({
+        ...s,
+        duration_minutes: s.durationMinutes,
+        is_archived: s.isArchived
+      }))
+      setServices(mapped as any)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load services — check your connection.')
     } finally {
       setLoading(false)
     }
@@ -68,13 +69,14 @@ export default function ServiceCatalog() {
     if (!profile?.org_id) return
     setLoadingPkgs(true)
     try {
-      const { data, error: err } = await supabase
-        .from('client_packages')
-        .select('*, client:clients!client_id(name)')
-        .eq('org_id', profile.org_id)
-        .order('created_at', { ascending: false })
-        .limit(100)
-      if (!err) setPackages(data || [])
+      const res = await getOrgClientPackages(dataconnect, { orgId: profile.org_id })
+      const mapped = (res.data.clientPackages || []).map(p => ({
+        ...p,
+        total_sessions: p.totalSessions,
+        used_sessions: p.usedSessions,
+        expires_at: p.expiresAt
+      }))
+      setPackages(mapped as any)
     } catch { /* ignore */ } finally {
       setLoadingPkgs(false)
     }
@@ -85,15 +87,12 @@ export default function ServiceCatalog() {
     if (!pkgForm.name.trim()) { setPkgError('Name is required.'); return }
     setPkgError(null)
     setAddingPkg(true)
-    // This creates a "template" as a package with no client — we'll just store it as reference
-    // Actually, packages belong to clients. Let's just show existing packages for management.
-    // For now, store package templates in a simpler way — just show the existing packages list.
     setAddingPkg(false)
     setPkgError('Package templates coming soon. Packages are currently added from the Client Detail page in the Dashboard.')
   }
 
-  const active   = services.filter(s => !s.is_archived)
-  const archived = services.filter(s =>  s.is_archived)
+  const active   = services.filter(s => !(s as any).is_archived)
+  const archived = services.filter(s =>  (s as any).is_archived)
 
   // -- Add service --
   async function handleAdd(e) {
@@ -101,20 +100,24 @@ export default function ServiceCatalog() {
     if (!addName.trim()) { setAddError('Name is required.'); return }
     setAddError(null)
     setAdding(true)
-    const { error: err } = await supabase.from('services').insert({
-      org_id:      profile.org_id,
-      name:        addName.trim(),
-      duration_minutes: Number(addMinutes),
-      price:       Number(addPrice),
-      is_archived: false,
-    })
-    setAdding(false)
-    if (err) { setAddError(err.message); return }
-    setAddName('')
-    setAddMinutes(60)
-    setAddPrice(0)
-    setShowAdd(false)
-    loadServices()
+    try {
+      await createService(dataconnect, {
+        orgId: profile.org_id,
+        name: addName.trim(),
+        description: '',
+        durationMinutes: Number(addMinutes),
+        price: Number(addPrice)
+      })
+      setAddName('')
+      setAddMinutes(60)
+      setAddPrice(0)
+      setShowAdd(false)
+      loadServices()
+    } catch (err: any) {
+      setAddError(err.message || 'Failed to add service.')
+    } finally {
+      setAdding(false)
+    }
   }
 
   // -- Inline edit --
@@ -135,23 +138,33 @@ export default function ServiceCatalog() {
     if (!editName.trim()) { setEditError('Name is required.'); return }
     setEditSaving(true)
     setEditError(null)
-    const { error: err } = await supabase
-      .from('services')
-      .update({ name: editName.trim(), duration_minutes: Number(editMinutes), price: Number(editPrice) })
-      .eq('id', row.id)
-    setEditSaving(false)
-    if (err) { setEditError(err.message); return }
-    setEditId(null)
-    loadServices()
+    try {
+      await updateService(dataconnect, {
+        id: row.id,
+        name: editName.trim(),
+        durationMinutes: Number(editMinutes),
+        price: Number(editPrice)
+      })
+      setEditId(null)
+      loadServices()
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to save edit.')
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   // -- Archive / Restore --
   async function toggleArchive(row) {
-    const { error: err } = await supabase
-      .from('services')
-      .update({ is_archived: !row.is_archived })
-      .eq('id', row.id)
-    if (!err) loadServices()
+    try {
+      await toggleServiceArchive(dataconnect, {
+        id: row.id,
+        isArchived: !(row as any).is_archived
+      })
+      loadServices()
+    } catch (err) {
+      console.error(err)
+    }
   }
 
   if (loading) return (
