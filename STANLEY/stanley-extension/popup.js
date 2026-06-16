@@ -201,23 +201,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Validate account status limits
-  function validateAccess(status, trialEndsAtIso) {
+  function validateAccess(status) {
     if (status === 'active') {
       return { isValid: true, label: "Butler Status: Active (Paid License)", reason: "" };
     }
-    
-    if (status === 'trialing' && trialEndsAtIso) {
-      const ends = new Date(trialEndsAtIso).getTime();
-      const now = Date.now();
-      if (ends > now) {
-        const daysLeft = Math.ceil((ends - now) / (24 * 60 * 60 * 1000));
-        return { isValid: true, label: `Butler Status: Trial active (${daysLeft} days left)`, reason: "" };
-      } else {
-        return { isValid: false, label: "", reason: "Trial expired. Purchase a lifetime license." };
-      }
-    }
-
-    return { isValid: false, label: "", reason: "License inactive. Upgrade account to access." };
+    return { isValid: false, label: "", reason: "License inactive. Purchase a license to access." };
   }
 
   // Session verification on load
@@ -226,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (data.idToken && data.uid) {
       // Validate local cache first
-      const access = validateAccess(data.status, data.trialEndsAt);
+      const access = validateAccess(data.status);
       if (access.isValid) {
         hasValidSession = true;
         userInfo.textContent = access.label;
@@ -242,18 +230,14 @@ document.addEventListener('DOMContentLoaded', () => {
           if (dbRes.ok) {
             const dbData = await dbRes.json();
             const status = dbData.fields.status ? dbData.fields.status.stringValue : 'inactive';
-            let trialEndsAtVal = null;
-            if (dbData.fields.trialEndsAt && dbData.fields.trialEndsAt.timestampValue) {
-              trialEndsAtVal = dbData.fields.trialEndsAt.timestampValue;
-            }
             
-            const freshAccess = validateAccess(status, trialEndsAtVal);
+            const freshAccess = validateAccess(status);
             if (!freshAccess.isValid) {
               // Session expired in backend, sign out
               signoutBtn.click();
             } else {
               userInfo.textContent = freshAccess.label;
-              chrome.storage.local.set({ status, trialEndsAt: trialEndsAtVal });
+              chrome.storage.local.set({ status });
             }
           }
         } catch (e) {
