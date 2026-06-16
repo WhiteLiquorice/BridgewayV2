@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { createClient } from '@bridgeway/database'
+import { createClient, updateClient, getOrgClients } from '@bridgeway/database'
 import { dataconnect } from '../lib/firebase'
 import { useToast } from '../context/ToastContext'
 import { logActivity } from '../lib/logActivity'
@@ -15,6 +15,7 @@ interface MappedClient {
   notes: string | null
   status: 'valid' | 'invalid'
   errors: string[]
+  duplicateOf?: any
 }
 
 const BRIDGEWAY_FIELDS = [
@@ -43,6 +44,10 @@ export default function ClientImporter() {
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importStats, setImportStats] = useState({ total: 0, success: 0, failed: 0 })
+  const [editedClients, setEditedClients] = useState<MappedClient[] | null>(null)
+  const [conflictResolution, setConflictResolution] = useState<'skip' | 'overwrite' | 'merge'>('skip')
+  const [failedRows, setFailedRows] = useState<{ row: any; error: string }[]>([])
+  const [existingClients, setExistingClients] = useState<any[]>([])
 
   const orgId = org?.id
 
@@ -266,7 +271,55 @@ export default function ClientImporter() {
     return mapped
   }
 
-  const mappedClients = getMappedClients()
+  const updateEditedClient = (idx: number, field: keyof MappedClient, val: any) => {
+    setEditedClients(prev => {
+      if (!prev) return null
+      const copy = [...prev]
+      const item = { ...copy[idx] }
+
+      if (field === 'name') {
+        item.name = val
+      } else if (field === 'email') {
+        item.email = val || null
+      } else if (field === 'phone') {
+        item.phone = val || null
+      } else if (field === 'date_of_birth') {
+        item.date_of_birth = val || null
+      } else if (field === 'address') {
+        item.address = val || null
+      } else if (field === 'notes') {
+        item.notes = val || null
+      }
+
+      // Re-run validation
+      const errors: string[] = []
+      if (!item.name.trim()) {
+        errors.push('Name field is missing or empty.')
+      }
+      if (item.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item.email)) {
+        errors.push(`Invalid email format: "${item.email}". This field will be skipped.`)
+      }
+
+      // Re-check duplicate in memory
+      const duplicate = existingClients.find(x => 
+        (item.email && x.email && x.email.toLowerCase() === item.email.toLowerCase()) || 
+        (item.phone && x.phone && x.phone === item.phone)
+      )
+      if (duplicate) {
+        item.duplicateOf = duplicate
+        errors.push(`Duplicate client detected: matches existing client "${duplicate.name}".`)
+      } else {
+        item.duplicateOf = undefined
+      }
+
+      item.errors = errors
+      item.status = errors.some(e => e.includes('Name field')) ? 'invalid' : 'valid'
+      copy[idx] = item
+      return copy
+    })
+  }
+
+  const mappedClients = editedClients || getMappedClients()
   const validClients = mappedClients.filter(c => c.status === 'valid')
   const invalidClientsCount = mappedClients.length - validClients.length
 
@@ -275,20 +328,21 @@ export default function ClientImporter() {
     setImporting(true)
     setStep(4)
     setImportProgress(0)
+    setFailedRows([])
 
     const chunkSize = 25
     let successCount = 0
     let failedCount = 0
+    const failedList: { row: any; error: string }[] = []
 
-    // Filter out invalid rows (missing names)
     const recordsToInsert = validClients.map(c => ({
-      org_id: orgId,
       name: c.name,
       email: c.email,
       phone: c.phone,
       date_of_birth: c.date_of_birth,
       address: c.address,
-      notes: c.notes
+      notes: c.notes,
+      duplicateOf: c.duplicateOf
     }))
 
     const totalRecords = recordsToInsert.length
@@ -297,16 +351,51 @@ export default function ClientImporter() {
     for (let i = 0; i < totalRecords; i += chunkSize) {
       const chunk = recordsToInsert.slice(i, i + chunkSize)
       try {
-        await Promise.all(chunk.map(c => createClient(dataconnect, {
-          orgId: orgId,
-          name: c.name,
-          email: c.email,
-          phone: c.phone,
-          dateOfBirth: c.date_of_birth,
-          address: c.address,
-          notes: c.notes
-        })))
-        successCount += chunk.length
+        await Promise.all(chunk.map(async (c) => {
+          try {
+            if (c.duplicateOf) {
+              if (conflictResolution === 'skip') {
+                return
+              }
+              const id = c.duplicateOf.id
+              if (conflictResolution === 'overwrite') {
+                await updateClient(dataconnect, {
+                  id,
+                  name: c.name,
+                  email: c.email,
+                  phone: c.phone,
+                  dateOfBirth: c.date_of_birth,
+                  address: c.address,
+                  notes: c.notes
+                })
+              } else if (conflictResolution === 'merge') {
+                await updateClient(dataconnect, {
+                  id,
+                  name: c.duplicateOf.name || c.name,
+                  email: c.duplicateOf.email || c.email,
+                  phone: c.duplicateOf.phone || c.phone,
+                  dateOfBirth: c.duplicateOf.dateOfBirth || c.date_of_birth,
+                  address: c.duplicateOf.address || c.address,
+                  notes: c.duplicateOf.notes || c.notes
+                })
+              }
+            } else {
+              await createClient(dataconnect, {
+                orgId: orgId!,
+                name: c.name,
+                email: c.email,
+                phone: c.phone,
+                dateOfBirth: c.date_of_birth,
+                address: c.address,
+                notes: c.notes
+              })
+            }
+            successCount++
+          } catch (itemErr: any) {
+            failedCount++
+            failedList.push({ row: c, error: itemErr.message || 'Insert failed.' })
+          }
+        }))
       } catch (err) {
         failedCount += chunk.length
       }
@@ -315,6 +404,8 @@ export default function ClientImporter() {
       setImportProgress(progress)
       setImportStats({ total: totalRecords, success: successCount, failed: failedCount })
     }
+
+    setFailedRows(failedList)
 
     logActivity({
       org_id: orgId,
@@ -325,12 +416,17 @@ export default function ClientImporter() {
         total_attempted: mappedClients.length, 
         imported_successfully: successCount, 
         skipped_invalid: invalidClientsCount,
-        failed_insert: failedCount
+        failed_insert: failedCount,
+        conflict_strategy: conflictResolution
       }
     })
 
     setImporting(false)
-    showToast(`Successfully imported ${successCount} clients`, 'success')
+    if (failedCount === 0) {
+      showToast(`Successfully imported ${successCount} clients`, 'success')
+    } else {
+      showToast(`Import completed with ${failedCount} failures. You can download the error report.`, 'warning')
+    }
   }
 
   return (
@@ -453,8 +549,8 @@ export default function ClientImporter() {
             >
               Back
             </button>
-            <button
-              onClick={() => {
+             <button
+              onClick={async () => {
                 // Validate that at least Name OR First Name/Last Name are mapped
                 const hasName = mapping.name
                 const hasSplitName = mapping.first_name || mapping.last_name
@@ -462,7 +558,35 @@ export default function ClientImporter() {
                   showToast('You must map either the Full Name field or at least one of First Name / Last Name', 'error')
                   return
                 }
-                setStep(3)
+                
+                try {
+                  const { data } = await getOrgClients(dataconnect, { orgId: orgId! })
+                  const existing = data?.clients || []
+                  setExistingClients(existing)
+
+                  // Build lookup maps
+                  const existingByEmail = new Map(existing.filter(x => x.email).map(x => [x.email.toLowerCase(), x]))
+                  const existingByPhone = new Map(existing.filter(x => x.phone).map(x => [x.phone, x]))
+
+                  const initialMapped = getMappedClients().map(c => {
+                    const duplicate = (c.email && existingByEmail.get(c.email.toLowerCase())) || (c.phone && existingByPhone.get(c.phone))
+                    if (duplicate) {
+                      return {
+                        ...c,
+                        duplicateOf: duplicate,
+                        errors: [...c.errors, `Duplicate client detected: matches existing client "${duplicate.name}".`]
+                      }
+                    }
+                    return c
+                  })
+                  setEditedClients(initialMapped)
+                  setStep(3)
+                } catch (err: any) {
+                  showToast('Error checking existing clients directory.', 'error')
+                  const initialMapped = getMappedClients()
+                  setEditedClients(initialMapped)
+                  setStep(3)
+                }
               }}
               className="px-5 py-2.5 bg-brand text-[#0c1a2e] text-sm font-semibold rounded-lg hover:bg-brand transition-colors"
             >
@@ -478,9 +602,21 @@ export default function ClientImporter() {
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-base font-semibold text-white">Review & Verify Data</h2>
-              <p className="text-xs text-gray-500 mt-1">Review validation results and check the parsed layout before finalizing the switch.</p>
+              <p className="text-xs text-gray-500 mt-1">Directly edit any cell inline. Select duplicate conflict resolution strategy below.</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 bg-gray-950/40 border border-gray-800/60 p-2 rounded-lg text-xs">
+                <span className="text-gray-400 font-medium">Duplicate Strategy:</span>
+                <select
+                  value={conflictResolution}
+                  onChange={e => setConflictResolution(e.target.value as any)}
+                  className="bg-[#0c1a2e] border border-gray-700 rounded text-white py-0.5 px-2 text-xs focus:ring-0 focus:outline-none"
+                >
+                  <option value="skip">Skip Duplicates</option>
+                  <option value="overwrite">Overwrite / Update</option>
+                  <option value="merge">Merge Empty Fields</option>
+                </select>
+              </div>
               <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-medium">
                 {validClients.length} ready to import
               </div>
@@ -491,18 +627,18 @@ export default function ClientImporter() {
               )}
             </div>
           </div>
-
+ 
           {/* Table Preview */}
           <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
             <div className="overflow-x-auto max-h-80">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-gray-900 border-b border-gray-800 z-10">
                   <tr>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Line</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">DOB</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Line</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-48">Name</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-48">Email</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-36">Phone</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-36">DOB</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Validation status</th>
                   </tr>
                 </thead>
@@ -510,17 +646,44 @@ export default function ClientImporter() {
                   {mappedClients.slice(0, 100).map((c, idx) => (
                     <tr key={idx} className={`text-xs hover:bg-white/[0.01] ${c.status === 'invalid' ? 'bg-red-500/[0.02]' : ''}`}>
                       <td className="px-5 py-3 text-gray-500 font-mono">{idx + 1}</td>
-                      <td className="px-5 py-3">
-                        <span className={`font-medium ${c.name ? 'text-gray-200' : 'text-red-400 italic'}`}>
-                          {c.name || '[Missing Name]'}
-                        </span>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={c.name}
+                          onChange={e => updateEditedClient(idx, 'name', e.target.value)}
+                          className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-brand px-1 py-0.5 w-full text-white text-xs focus:ring-0 focus:outline-none font-medium"
+                        />
                       </td>
-                      <td className="px-5 py-3 text-gray-400">{c.email || '—'}</td>
-                      <td className="px-5 py-3 text-gray-400">{c.phone || '—'}</td>
-                      <td className="px-5 py-3 text-gray-400">{c.date_of_birth || '—'}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={c.email || ''}
+                          onChange={e => updateEditedClient(idx, 'email', e.target.value)}
+                          className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-brand px-1 py-0.5 w-full text-gray-300 text-xs focus:ring-0 focus:outline-none"
+                          placeholder="—"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={c.phone || ''}
+                          onChange={e => updateEditedClient(idx, 'phone', e.target.value)}
+                          className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-brand px-1 py-0.5 w-full text-gray-300 text-xs focus:ring-0 focus:outline-none"
+                          placeholder="—"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={c.date_of_birth || ''}
+                          onChange={e => updateEditedClient(idx, 'date_of_birth', e.target.value)}
+                          className="bg-transparent border-b border-transparent hover:border-gray-700 focus:border-brand px-1 py-0.5 w-full text-gray-300 text-xs focus:ring-0 focus:outline-none"
+                          placeholder="YYYY-MM-DD"
+                        />
+                      </td>
                       <td className="px-5 py-3">
                         {c.errors.length === 0 ? (
-                          <span className="text-emerald-400">✓ Valid</span>
+                          <span className="text-emerald-400 font-semibold">✓ Ready</span>
                         ) : (
                           <div className="space-y-1">
                             {c.errors.map((err, errIdx) => (
@@ -544,7 +707,7 @@ export default function ClientImporter() {
               </table>
             </div>
           </div>
-
+ 
           <div className="flex justify-between items-center pt-2">
             <button
               onClick={() => setStep(2)}
@@ -562,7 +725,7 @@ export default function ClientImporter() {
           </div>
         </div>
       )}
-
+ 
       {/* Step 4: Import execution and success */}
       {step === 4 && (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center space-y-6 max-w-md mx-auto">
@@ -588,14 +751,30 @@ export default function ClientImporter() {
             </>
           ) : (
             <>
-              <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                </svg>
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${
+                failedRows.length === 0 
+                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
+                  : 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+              }`}>
+                {failedRows.length === 0 ? (
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                )}
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white mb-1">Import Completed</h3>
-                <p className="text-xs text-gray-500">Your client database has been successfully updated.</p>
+                <h3 className="text-lg font-semibold text-white mb-1">
+                  {failedRows.length === 0 ? 'Import Completed' : 'Import Partially Completed'}
+                </h3>
+                <p className="text-xs text-gray-500">
+                  {failedRows.length === 0 
+                    ? 'Your client database has been successfully updated.' 
+                    : 'The database was updated, but some rows had conflicts or insert errors.'}
+                </p>
               </div>
               <div className="bg-gray-950/40 p-4 rounded-xl border border-gray-800/60 text-sm space-y-2 max-w-xs mx-auto">
                 <div className="flex justify-between"><span className="text-gray-500">Total Clients:</span><span className="text-white font-bold">{mappedClients.length}</span></div>
@@ -603,10 +782,42 @@ export default function ClientImporter() {
                 {invalidClientsCount > 0 && (
                   <div className="flex justify-between"><span className="text-gray-500">Skipped (Invalid):</span><span className="text-amber-400 font-bold">{invalidClientsCount}</span></div>
                 )}
-                {importStats.failed > 0 && (
-                  <div className="flex justify-between"><span className="text-gray-500">Failed:</span><span className="text-red-400 font-bold">{importStats.failed}</span></div>
+                {failedRows.length > 0 && (
+                  <div className="flex justify-between"><span className="text-gray-500">Failed / Rejected:</span><span className="text-red-400 font-bold">{failedRows.length}</span></div>
                 )}
               </div>
+              
+              {failedRows.length > 0 && (
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      const headers = ['Name', 'Email', 'Phone', 'DOB', 'Address', 'Notes', 'Error Reason']
+                      const csvRowsStr = failedRows.map(f => [
+                        `"${f.row.name.replace(/"/g, '""')}"`,
+                        `"${(f.row.email || '').replace(/"/g, '""')}"`,
+                        `"${(f.row.phone || '').replace(/"/g, '""')}"`,
+                        `"${(f.row.date_of_birth || '').replace(/"/g, '""')}"`,
+                        `"${(f.row.address || '').replace(/"/g, '""')}"`,
+                        `"${(f.row.notes || '').replace(/"/g, '""')}"`,
+                        `"${f.error.replace(/"/g, '""')}"`
+                      ].join(','))
+                      const csvContent = [headers.join(','), ...csvRowsStr].join('\n')
+                      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+                      const url = URL.createObjectURL(blob)
+                      const link = document.createElement('a')
+                      link.setAttribute('href', url)
+                      link.setAttribute('download', `failed_clients_import_${Date.now()}.csv`)
+                      document.body.appendChild(link)
+                      link.click()
+                      document.body.removeChild(link)
+                    }}
+                    className="w-full px-4 py-2 bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-500/20 text-xs font-semibold rounded-lg transition-colors"
+                  >
+                    Download Failed Rows (CSV)
+                  </button>
+                </div>
+              )}
+ 
               <div className="flex gap-3 justify-center pt-2">
                 <button
                   onClick={() => {
@@ -614,6 +825,8 @@ export default function ClientImporter() {
                     setCsvHeaders([])
                     setCsvRows([])
                     setMapping({})
+                    setEditedClients(null)
+                    setFailedRows([])
                     setStep(1)
                   }}
                   className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-semibold rounded-lg transition-colors"
