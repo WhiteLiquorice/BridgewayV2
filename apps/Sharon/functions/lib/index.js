@@ -1,0 +1,269 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.voiceCallStatus = exports.voiceWebhookRespond = exports.voiceWebhook = void 0;
+const https_1 = require("firebase-functions/v2/https");
+const admin = __importStar(require("firebase-admin"));
+const twilio_1 = __importDefault(require("twilio"));
+const generative_ai_1 = require("@google/generative-ai");
+if (admin.apps.length === 0) {
+    admin.initializeApp();
+}
+const db = admin.firestore();
+const SHARON_SYSTEM_INSTRUCTION = `You are Sharon, an elite virtual assistant and secretary.
+Your job is to converse with a telephone caller, get their name, contact details (phone, email), reason for calling, and take detailed notes.
+Keep your answers brief, professional, and friendly. Your response will be read aloud to the user on the phone using text-to-speech. Do not output markdown, lists, bullet points, or special characters. Use standard, conversational punctuation only. Limit your replies to 2-3 sentences max.
+If the conversation is complete and you have gathered all info (or the caller wants to finish), say goodbye clearly to trigger a hangup.`;
+/**
+ * Endpoint 1: Initial Inbound Call Handler
+ * Twilio directs the incoming voice call here.
+ */
+exports.voiceWebhook = (0, https_1.onRequest)(async (req, res) => {
+    const { CallSid, From } = req.body;
+    if (!CallSid || !From) {
+        res.status(400).send("Missing Twilio CallSid or From phone number.");
+        return;
+    }
+    console.log(`[Sharon Voice Webhook] Incoming call from ${From} (CallSid: ${CallSid})`);
+    try {
+        // Save initial call record in Firestore
+        const initialRecord = {
+            callSid: CallSid,
+            from: From,
+            status: 'in_progress',
+            turns: [],
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+        await db.collection("sharon_calls").doc(CallSid).set(initialRecord);
+        // Build Twilio Voice TwiML response
+        const response = new twilio_1.default.twiml.VoiceResponse();
+        response.say({ voice: 'Polly.Liv' }, "Hello, thank you for calling. I am Sharon, your virtual assistant. How can I help you today?");
+        // Listen for caller speech
+        response.gather({
+            input: ['speech'],
+            action: '/voiceWebhookRespond',
+            method: 'POST',
+            timeout: 5,
+            speechTimeout: 'auto'
+        });
+        res.type('text/xml');
+        res.send(response.toString());
+    }
+    catch (err) {
+        const error = err;
+        console.error("[Sharon Voice Webhook] Error starting call:", error);
+        res.status(500).send(`Server Error: ${error.message}`);
+    }
+});
+/**
+ * Endpoint 2: Ongoing Conversational Responder
+ * Processes caller speech, queries Gemini for the assistant's turn, and plays the response.
+ */
+exports.voiceWebhookRespond = (0, https_1.onRequest)(async (req, res) => {
+    const { CallSid, SpeechResult } = req.body;
+    if (!CallSid) {
+        res.status(400).send("Missing Twilio CallSid.");
+        return;
+    }
+    const response = new twilio_1.default.twiml.VoiceResponse();
+    try {
+        const docRef = db.collection("sharon_calls").doc(CallSid);
+        const docSnap = await docRef.get();
+        if (!docSnap.exists) {
+            res.status(404).send("Call session not found.");
+            return;
+        }
+        const callData = docSnap.data();
+        const turns = callData.turns || [];
+        // If caller spoke, log it
+        if (SpeechResult) {
+            console.log(`[Sharon Respond] Caller: "${SpeechResult}"`);
+            turns.push({
+                role: 'caller',
+                text: SpeechResult,
+                timestamp: new Date().toISOString()
+            });
+        }
+        else {
+            // Silence or empty input
+            console.log("[Sharon Respond] Caller was silent.");
+            response.say({ voice: 'Polly.Liv' }, "I'm sorry, I didn't catch that. Could you please repeat it?");
+            response.gather({
+                input: ['speech'],
+                action: '/voiceWebhookRespond',
+                method: 'POST',
+                timeout: 5
+            });
+            res.type('text/xml');
+            res.send(response.toString());
+            return;
+        }
+        // Call Gemini API to get Sharon's response
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            throw new Error("GEMINI_API_KEY is not defined in backend functions environment.");
+        }
+        const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({
+            model: "gemini-1.5-flash",
+            systemInstruction: SHARON_SYSTEM_INSTRUCTION
+        });
+        // Format chat history for Gemini
+        const formattedHistory = turns.map(t => {
+            return `${t.role === 'caller' ? 'Caller' : 'Sharon'}: ${t.text}`;
+        }).join('\n');
+        const prompt = `Here is the current dialogue history:\n${formattedHistory}\n\nSharon:`;
+        const result = await model.generateContent(prompt);
+        const sharonResponseText = result.response.text().trim();
+        console.log(`[Sharon Respond] Sharon AI: "${sharonResponseText}"`);
+        // Log Sharon's turn
+        turns.push({
+            role: 'sharon',
+            text: sharonResponseText,
+            timestamp: new Date().toISOString()
+        });
+        await docRef.update({
+            turns,
+            updatedAt: new Date()
+        });
+        response.say({ voice: 'Polly.Liv' }, sharonResponseText);
+        // Check if Sharon said goodbye to end the call
+        const isGoodbye = /goodbye|bye|have a nice day|farewell|thank you for calling/i.test(sharonResponseText);
+        if (isGoodbye) {
+            console.log(`[Sharon Respond] Ending conversation for CallSid: ${CallSid}`);
+            response.hangup();
+        }
+        else {
+            // Continue conversational gather
+            response.gather({
+                input: ['speech'],
+                action: '/voiceWebhookRespond',
+                method: 'POST',
+                timeout: 5,
+                speechTimeout: 'auto'
+            });
+        }
+        res.type('text/xml');
+        res.send(response.toString());
+    }
+    catch (err) {
+        const error = err;
+        console.error("[Sharon Respond] Conversation failed:", error);
+        response.say({ voice: 'Polly.Liv' }, "I'm sorry, I am experiencing a temporary technical difficulty. Please call back shortly.");
+        response.hangup();
+        res.type('text/xml');
+        res.send(response.toString());
+    }
+});
+/**
+ * Endpoint 3: Twilio Call Status Callback
+ * Fires when Twilio completes the call (hangup). Triggers AI analysis/summary.
+ */
+exports.voiceCallStatus = (0, https_1.onRequest)(async (req, res) => {
+    const { CallSid, CallStatus } = req.body;
+    if (!CallSid) {
+        res.status(400).send("Missing Twilio CallSid.");
+        return;
+    }
+    console.log(`[Sharon Status Callback] CallSid: ${CallSid} Status: ${CallStatus}`);
+    if (CallStatus === 'completed') {
+        try {
+            const docRef = db.collection("sharon_calls").doc(CallSid);
+            const docSnap = await docRef.get();
+            if (docSnap.exists) {
+                const callData = docSnap.data();
+                const turns = callData.turns || [];
+                if (turns.length > 0) {
+                    console.log(`[Sharon Status Callback] Call complete. Generating secretary note summary...`);
+                    const apiKey = process.env.GEMINI_API_KEY;
+                    if (apiKey) {
+                        const genAI = new generative_ai_1.GoogleGenerativeAI(apiKey);
+                        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                        const chatText = turns.map(t => `${t.role}: ${t.text}`).join('\n');
+                        const summaryPrompt = `You are a professional secretary. Analyze the telephone call transcript below.
+Extract and output a JSON block containing the following keys (ensure values are null if not provided):
+- name: The caller's full name
+- email: The caller's email address
+- phone: The caller's callback phone number
+- purpose: A short 1-sentence summary of the reason they called
+- notes: A detailed, bulleted summary list of notes/appointments mentioned in the call
+
+Transcript:
+${chatText}
+
+Output ONLY valid JSON. No markdown wrappers.`;
+                        const result = await model.generateContent(summaryPrompt);
+                        const rawJson = result.response.text().replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+                        try {
+                            const summaryData = JSON.parse(rawJson);
+                            const notesFormatted = Array.isArray(summaryData.notes)
+                                ? summaryData.notes.join('\n')
+                                : (summaryData.notes || "");
+                            await docRef.update({
+                                status: 'completed',
+                                callerName: summaryData.name || null,
+                                callerEmail: summaryData.email || null,
+                                callerPhone: summaryData.phone || null,
+                                callPurpose: summaryData.purpose || null,
+                                summaryNotes: notesFormatted || null,
+                                updatedAt: new Date()
+                            });
+                            console.log(`[Sharon Status Callback] Note summary logged for CallSid: ${CallSid}`);
+                        }
+                        catch (jsonErr) {
+                            console.error("[Sharon Status Callback] Failed parsing JSON summary:", jsonErr);
+                            await docRef.update({ status: 'completed', updatedAt: new Date() });
+                        }
+                    }
+                    else {
+                        await docRef.update({ status: 'completed', updatedAt: new Date() });
+                    }
+                }
+                else {
+                    await docRef.update({ status: 'completed', updatedAt: new Date() });
+                }
+            }
+        }
+        catch (err) {
+            console.error("[Sharon Status Callback] Error logging completion:", err);
+        }
+    }
+    res.status(200).send("OK");
+});
+//# sourceMappingURL=index.js.map

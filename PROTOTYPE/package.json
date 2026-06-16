@@ -1,0 +1,17 @@
+{
+  "name": "bridgeway-prototypes",
+  "version": "1.0.0",
+  "description": "Initial prototypes for AI Voicemail and Project Stanley browser assistant",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "playwright": "^1.42.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/node": "^20.12.7",
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0"
+  }
+}
