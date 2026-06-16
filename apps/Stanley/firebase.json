@@ -1,7 +1,7 @@
 {
   "hosting": {
     "site": "bridgeway-db29e-stanley",
-    "public": "frontend/dist",
+    "public": "public",
     "ignore": [
       "firebase.json",
       "**/.*",

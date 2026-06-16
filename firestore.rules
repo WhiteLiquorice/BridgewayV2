@@ -168,6 +168,12 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ─── Project Stanley Users ──────────────────────────────────────────
+    match /users/{userId} {
+      allow create, read, update: if isAuthenticated() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
     // ─── Default deny ───────────────────────────────────────────────────
     // Everything not matched above is denied by default.
     // Data Connect (server-side) bypasses these rules entirely.

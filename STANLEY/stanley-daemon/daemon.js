@@ -1,8 +1,63 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // Redirect all standard console.log output to stderr so it does not corrupt the Native Messaging stdout stream
 console.log = console.error;
+
+// Auto register native messaging host path and registry key on Windows
+function autoRegister() {
+  if (process.platform !== 'win32') return;
+
+  const exePath = process.execPath;
+  const isPackaged = !exePath.endsWith('node.exe') && !exePath.endsWith('node.cmd') && !exePath.endsWith('node');
+  
+  let targetPath;
+  if (isPackaged) {
+    targetPath = exePath;
+  } else {
+    targetPath = path.join(__dirname, 'daemon.bat');
+  }
+
+  const manifestPath = path.join(__dirname, 'com.project.stanley.json');
+
+  try {
+    if (fs.existsSync(manifestPath)) {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (manifest.path !== targetPath) {
+        manifest.path = targetPath;
+        fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+        console.error(`[StanleyDaemon] Auto-updated manifest path to: ${targetPath}`);
+      }
+    }
+  } catch (err) {
+    console.error("[StanleyDaemon] Failed to write manifest target path:", err);
+  }
+
+  try {
+    const regQueryCmd = `reg query "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.project.stanley" /ve`;
+    let needsWrite = false;
+    try {
+      const output = execSync(regQueryCmd, { stdio: ['ignore', 'pipe', 'ignore'] }).toString();
+      if (!output.includes(manifestPath)) {
+        needsWrite = true;
+      }
+    } catch (e) {
+      needsWrite = true;
+    }
+
+    if (needsWrite) {
+      const regAddCmd = `reg add "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.project.stanley" /ve /t REG_SZ /d "${manifestPath}" /f`;
+      execSync(regAddCmd);
+      console.error(`[StanleyDaemon] Auto-registered host pointing to: ${manifestPath}`);
+    }
+  } catch (err) {
+    console.error("[StanleyDaemon] Auto-registration failed:", err);
+  }
+}
+
+// Run self-registration
+autoRegister();
 
 const { StanleyFoundation } = require('../foundationAgent.js');
 
