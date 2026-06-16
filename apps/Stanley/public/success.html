@@ -172,24 +172,61 @@
       submitBtn.disabled = true;
 
       try {
-        // Create user in firebase Auth
+        const cleanEmail = email.toLowerCase();
+        
+        // 1. Query pending_payments first
+        const pendingRef = db.collection('pending_payments').doc(cleanEmail);
+        const pendingDoc = await pendingRef.get();
+        const hasPaid = pendingDoc.exists;
+
+        // 2. Create user in Firebase Auth
         const cred = await auth.createUserWithEmailAndPassword(email, password);
         const user = cred.user;
 
-        // Write user details to Firestore
-        await db.collection('users').doc(user.uid).set({
-          email: email,
-          status: 'active',
+        // 3. Write user details to Firestore
+        let status = 'trialing';
+        let trialEndsAt = null;
+        let isPaid = false;
+
+        if (hasPaid) {
+          status = 'active';
+          isPaid = true;
+        } else {
+          // Set trial duration to 7 days
+          const trialDuration = 7 * 24 * 60 * 60 * 1000;
+          trialEndsAt = new Date(Date.now() + trialDuration);
+        }
+
+        const userPayload = {
+          email: cleanEmail,
+          status: status,
+          paid: isPaid,
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        };
+
+        if (trialEndsAt) {
+          userPayload.trialEndsAt = firebase.firestore.Timestamp.fromDate(trialEndsAt);
+        }
+
+        await db.collection('users').doc(user.uid).set(userPayload);
+
+        // 4. Delete pending payment doc if it was claimed
+        if (hasPaid) {
+          await pendingRef.delete().catch(e => console.warn("Could not delete pending payment record:", e));
+        }
 
         statusMsg.className = "text-sm mt-3 text-center text-brand-500 font-semibold";
-        statusMsg.textContent = "Registration Successful! You may now log in to the extension.";
+        if (isPaid) {
+          statusMsg.textContent = "Paid Account Activated! You may now log in to the extension.";
+        } else {
+          statusMsg.textContent = "7-Day Free Trial Started! You may now log in to the extension.";
+        }
         form.reset();
       } catch (err) {
         console.error(err);
         statusMsg.className = "text-sm mt-3 text-center text-red-500";
         statusMsg.textContent = "Registration Failed: " + err.message;
+      } finally {
         submitBtn.disabled = false;
       }
     });

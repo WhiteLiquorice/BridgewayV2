@@ -29,7 +29,7 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
       color: var(--text-main);
       padding: 16px;
-      overflow-hidden: hidden;
+      overflow: hidden;
     }
 
     .header {
@@ -217,6 +217,22 @@
       border-color: rgba(34, 197, 94, 0.3);
       color: var(--brand);
     }
+
+    .text-input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .text-input:focus {
+      border-color: rgba(34, 197, 94, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -233,32 +249,64 @@
     </div>
   </div>
 
-  <!-- Prompt Box Card -->
-  <div class="card">
-    <label class="label" for="task-input">What task should Stanley do today?</label>
-    <textarea id="task-input" placeholder="e.g. Navigate to google.com, type 'Project Stanley' into the search input, then click search"></textarea>
+  <!-- Login Panel -->
+  <div id="login-panel" style="display: block;">
+    <div class="card">
+      <span class="label" style="text-align: center; margin-bottom: 16px; font-size: 13px; color: #fff;">Activate Stanley Butler</span>
+      
+      <div style="margin-bottom: 12px;">
+        <label class="label" for="login-email" style="font-size: 10px;">Email Address</label>
+        <input id="login-email" type="email" placeholder="name@domain.com" class="text-input">
+      </div>
+      
+      <div style="margin-bottom: 20px;">
+        <label class="label" for="login-password" style="font-size: 10px;">Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" class="text-input">
+      </div>
+      
+      <button id="login-btn" class="btn" style="margin-bottom: 10px;">Sign In & Activate</button>
+      <div id="login-status" style="font-size: 12px; text-align: center; color: var(--error); min-height: 18px; margin-top: 4px;"></div>
+    </div>
     
-    <div class="examples">
-      <span class="example-tag" data-text="navigate to https://news.ycombinator.com, scrape stories">HN Scraper</span>
-      <span class="example-tag" data-text="navigate to https://github.com, search for 'playwright'">Search GitHub</span>
-      <span class="example-tag" data-text="navigate to https://google.com, type 'Project Stanley' and submit">Google Search</span>
+    <div style="font-size: 11px; text-align: center; color: var(--text-muted); padding: 0 10px;">
+      New to Stanley? <a href="https://bridgeway-db29e-stanley.web.app" target="_blank" style="color: var(--brand); text-decoration: underline; font-weight: 600;">Start Trial / Buy License</a>
     </div>
   </div>
 
-  <!-- Run Button -->
-  <button id="run-btn" class="btn" disabled>
-    <span>Run Workflow</span>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <polygon points="5 3 19 12 5 21 5 3"></polygon>
-    </svg>
-  </button>
+  <!-- Main Panel (Hidden by default, shown after Auth verification) -->
+  <div id="main-panel" style="display: none;">
+    <div class="card" style="padding: 10px 16px; margin-bottom: 10px; display: flex; justify-between: space-between; align-items: center; background: rgba(34, 197, 94, 0.05); border-color: rgba(34, 197, 94, 0.2);">
+      <div style="font-size: 11px; color: var(--brand); font-weight: 600;" id="user-info">Butler is Active (Trial)</div>
+      <a href="#" id="signout-btn" style="font-size: 10px; color: var(--text-muted); text-decoration: underline;">Sign Out</a>
+    </div>
 
-  <!-- Status Log -->
-  <div class="card" style="margin-top: 16px; margin-bottom: 0;">
-    <span class="label">Activity Feed</span>
-    <div class="status-panel">
-      <div id="status-desc">Ready to launch daemon wrapper.</div>
-      <div id="status-log" class="status-log">Idle</div>
+    <!-- Prompt Box Card -->
+    <div class="card">
+      <label class="label" for="task-input">What task should Stanley do today?</label>
+      <textarea id="task-input" placeholder="e.g. Navigate to google.com, type 'Project Stanley' into the search input, then click search"></textarea>
+      
+      <div class="examples">
+        <span class="example-tag" data-text="navigate to https://news.ycombinator.com, scrape stories">HN Scraper</span>
+        <span class="example-tag" data-text="navigate to https://github.com, search for 'playwright'">Search GitHub</span>
+        <span class="example-tag" data-text="navigate to https://google.com, type 'Project Stanley' and submit">Google Search</span>
+      </div>
+    </div>
+
+    <!-- Run Button -->
+    <button id="run-btn" class="btn" disabled>
+      <span>Run Workflow</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+      </svg>
+    </button>
+
+    <!-- Status Log -->
+    <div class="card" style="margin-top: 16px; margin-bottom: 0;">
+      <span class="label">Activity Feed</span>
+      <div class="status-panel">
+        <div id="status-desc">Ready to launch daemon wrapper.</div>
+        <div id="status-log" class="status-log">Idle</div>
+      </div>
     </div>
   </div>
 

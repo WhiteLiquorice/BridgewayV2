@@ -261,6 +261,56 @@ exports.stripeWebhook = onRequest({ cors: true, secrets: [stripeSecretKey, strip
       return
     }
 
+    // Intercept Stanley Checkout Session
+    const isStanley = metadata.product === 'stanley' || 
+                      (session.amount_total === 3000 && !metadata.bookingId) ||
+                      (metadata.subscriptionTier === 'stanley');
+                      
+    if (isStanley) {
+      const customerId = session.customer;
+      let email = session.customer_details ? session.customer_details.email : null;
+      
+      if (customerId && !email) {
+        const customer = await stripe.customers.retrieve(customerId);
+        email = customer.email;
+      }
+      
+      if (!email) {
+        console.error("No email found for Stanley checkout session");
+        return res.send();
+      }
+      
+      email = email.toLowerCase().trim();
+      console.log(`[Stripe Webhook] Processing Stanley payment for: ${email}`);
+      
+      let uid = null;
+      try {
+        const userRecord = await admin.auth().getUserByEmail(email);
+        uid = userRecord.uid;
+      } catch (e) {
+        // User not registered yet
+      }
+      
+      if (uid) {
+        await db.collection('users').doc(uid).set({
+          email,
+          status: 'active',
+          paid: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+        console.log(`[Stripe Webhook] Activated existing user ${uid} via email match.`);
+      } else {
+        await db.collection('pending_payments').doc(email).set({
+          email,
+          status: 'active',
+          paid: true,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        console.log(`[Stripe Webhook] Stored pending payment document for email: ${email}`);
+      }
+      return res.send();
+    }
+
     // Handle SaaS Subscription
     const customerId = session.customer
     if (!customerId) {
