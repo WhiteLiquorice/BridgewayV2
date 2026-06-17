@@ -83,7 +83,7 @@
     </div>
     <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-300">
       <a href="#features" class="hover:text-brand-500 transition-colors">Features</a>
-      <a href="#matrix" class="hover:text-brand-500 transition-colors">Safety Matrix</a>
+      <a href="#matrix" class="hover:text-brand-500 transition-colors">Platform Comparison</a>
       <a href="#how-it-works" class="hover:text-brand-500 transition-colors">Local Architecture</a>
       <a href="#pricing" class="hover:text-brand-500 transition-colors">Pricing</a>
     </nav>
@@ -114,7 +114,7 @@
       <div class="flex flex-col items-center gap-4">
         <div class="flex flex-col sm:flex-row items-center gap-4">
           <a href="#pricing" class="px-8 py-4 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-500 hover:from-brand-600 hover:to-accent-600 text-darkbg-900 font-bold text-base md:text-lg shadow-lg shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-3">
-            Get Stanley Lifetime License
+            Get Stanley Subscription
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
             </svg>
@@ -210,6 +210,45 @@
     </div>
   </section>
 
+  <!-- Local Architecture (How It Works) -->
+  <section id="how-it-works" class="py-24 px-6 md:px-12 bg-black/40 border-t border-white/5 relative">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <h2 class="font-heading font-extrabold text-3xl md:text-4xl text-white mb-4">Local Architecture Flow</h2>
+        <p class="text-gray-400 max-w-xl mx-auto">How Stanley securely automates your web actions directly on your machine without cloud servers.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+        <!-- Step 1 -->
+        <div class="glass-card p-8 rounded-2xl border border-white/5 relative">
+          <div class="absolute -top-4 -left-4 w-8 h-8 rounded-lg bg-brand-500 text-darkbg-900 font-bold flex items-center justify-center text-sm shadow shadow-brand-500/30">1</div>
+          <h3 class="font-heading font-bold text-lg text-white mb-3 mt-2">1. Request in Extension</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            Enter your task inside the sandboxed Chrome Extension popup interface.
+          </p>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="glass-card p-8 rounded-2xl border border-white/5 relative">
+          <div class="absolute -top-4 -left-4 w-8 h-8 rounded-lg bg-brand-500 text-darkbg-900 font-bold flex items-center justify-center text-sm shadow shadow-brand-500/30">2</div>
+          <h3 class="font-heading font-bold text-lg text-white mb-3 mt-2">2. Native Messaging Pipe</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            The extension passes user intents directly to the local Windows daemon executable using Chrome's secure stdio messaging host.
+          </p>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="glass-card p-8 rounded-2xl border border-white/5 relative">
+          <div class="absolute -top-4 -left-4 w-8 h-8 rounded-lg bg-brand-500 text-darkbg-900 font-bold flex items-center justify-center text-sm shadow shadow-brand-500/30">3</div>
+          <h3 class="font-heading font-bold text-lg text-white mb-3 mt-2">3. Playwright Automation</h3>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            The daemon spins up a local Chromium browser window to execute actions quietly using your residential IP, evading cloud detection blocks.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Feature Matrix Section -->
   <section id="matrix" class="py-24 px-6 md:px-12">
     <div class="max-w-5xl mx-auto">
@@ -249,9 +288,9 @@
               <td class="p-6 text-gray-400">No viewable browser runtime</td>
             </tr>
             <tr>
-              <td class="p-6 font-medium text-white">Monthly Subscriptions</td>
-              <td class="p-6"><span class="text-brand-500 font-bold">✓</span> One-time license (No monthly costs)</td>
-              <td class="p-6 text-gray-400">High monthly API & hosting fees</td>
+              <td class="p-6 font-medium text-white">Running Cost</td>
+              <td class="p-6"><span class="text-brand-500 font-bold">✓</span> Flat $25 / Month subscription</td>
+              <td class="p-6 text-gray-400">High monthly API & hosting fees (usually $100+)</td>
             </tr>
           </tbody>
         </table>
@@ -266,32 +305,26 @@
       <div class="absolute -top-20 -left-20 w-64 h-64 bg-brand-500/10 rounded-full blur-3xl"></div>
       
       <div class="relative z-10">
-        <span class="px-4 py-1.5 rounded-full bg-brand-500/10 text-brand-500 text-xs font-bold uppercase tracking-widest mb-6 inline-block">SPECIAL LAUNCH OFFER</span>
         <h2 class="font-heading font-black text-3xl md:text-5xl text-white mb-4">Get Stanley Today</h2>
         <p class="text-gray-400 max-w-xl mx-auto mb-8 text-base">
-          Unlock the power of browser automation that runs locally on your computer. One-time payment. Forever yours.
+          Unlock the power of browser automation that runs locally on your computer.
         </p>
 
         <div class="flex flex-col items-center justify-center mb-8">
           <div class="flex items-baseline gap-2">
-            <span class="text-2xl text-gray-500 line-through font-semibold">$99</span>
-            <span class="text-6xl text-white font-heading font-black tracking-tight">$30</span>
-            <span class="text-gray-400 font-medium">One-Time License</span>
+            <span class="text-6xl text-white font-heading font-black tracking-tight">$25</span>
+            <span class="text-gray-400 font-medium">/ Month</span>
           </div>
-          <p class="text-brand-500 text-sm font-semibold mt-2">Save 70% during initial beta release</p>
         </div>
 
         <div class="max-w-md mx-auto">
           <!-- CTA to Stripe checkout -->
           <a href="https://buy.stripe.com/fZueVe9S38SV8fF38K3cc01" class="w-full py-4 px-8 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-500 text-darkbg-900 font-bold text-lg shadow-xl shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-3">
-            <span>Buy Lifetime License Now</span>
+            <span>Subscribe Now</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
           </a>
-          <p class="text-xs text-gray-500 mt-4">
-            30-day money-back guarantee. Lifetime updates included.
-          </p>
         </div>
       </div>
     </div>
