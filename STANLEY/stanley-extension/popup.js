@@ -1,3 +1,53 @@
+// Mock chrome APIs for browser preview environments
+if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+  window.chrome = {
+    runtime: {
+      sendMessage: (msg, callback) => {
+        console.log("[Mock Chrome API] sendMessage:", msg);
+        if (msg.action === "get_status") {
+          if (callback) {
+            callback({ 
+              connected: true, 
+              lastLog: "Active (Mock Preview Mode)", 
+              lastDesc: "Extension workspace is running on preview host." 
+            });
+          }
+        } else if (msg.action === "run_workflow") {
+          if (callback) callback({ success: true });
+        }
+      },
+      onMessage: {
+        addListener: () => {}
+      },
+      lastError: null
+    },
+    storage: {
+      local: {
+        get: (keys, callback) => {
+          console.log("[Mock Chrome API] storage.get:", keys);
+          // Return a mock active session for preview convenience
+          if (callback) {
+            callback({
+              email: "preview@projectstanley.com",
+              uid: "preview-user-123",
+              idToken: "mock-token",
+              status: "active"
+            });
+          }
+        },
+        set: (data, callback) => {
+          console.log("[Mock Chrome API] storage.set:", data);
+          if (callback) callback();
+        },
+        remove: (keys, callback) => {
+          console.log("[Mock Chrome API] storage.remove:", keys);
+          if (callback) callback();
+        }
+      }
+    }
+  };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // UI Panels
   const loginPanel = document.getElementById('login-panel');
