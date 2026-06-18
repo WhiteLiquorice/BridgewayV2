@@ -66,6 +66,77 @@ exports.createPortalSession = onRequest({ cors: true, secrets: [stripeSecretKey]
   } catch (err) { res.status(500).send({ error: err.message }) }
 })
 
+exports.registerStanleyUser = onRequest({ cors: true, secrets: [stripeSecretKey] }, async (req, res) => {
+  const { email, password, sessionId } = req.body
+
+  if (!email || !password || !sessionId) {
+    return res.status(400).send({ error: 'email, password, and sessionId are required' })
+  }
+
+  const cleanEmail = email.trim().toLowerCase()
+
+  try {
+    const activeStripe = require('stripe')(stripeSecretKey.value() || process.env.STRIPE_SECRET_KEY)
+
+    console.log(`Retrieving Stripe session: ${sessionId}`)
+    const session = await activeStripe.checkout.sessions.retrieve(sessionId)
+
+    if (!session) {
+      return res.status(400).send({ error: 'Invalid checkout session ID' })
+    }
+
+    if (session.payment_status !== 'paid') {
+      return res.status(400).send({ error: 'Checkout session is not paid' })
+    }
+
+    const regRef = db.collection('stanley_registrations').doc(sessionId)
+    const regDoc = await regRef.get()
+
+    if (regDoc.exists) {
+      return res.status(400).send({ error: 'This payment checkout session has already been used to register an account' })
+    }
+
+    console.log(`Creating user in Auth for email: ${cleanEmail}`)
+    let userRecord
+    try {
+      userRecord = await admin.auth().createUser({
+        email: cleanEmail,
+        password: password,
+        emailVerified: false
+      })
+    } catch (authErr) {
+      if (authErr.code === 'auth/email-already-in-use') {
+        return res.status(400).send({ error: 'An account with this email address already exists' })
+      }
+      throw authErr
+    }
+
+    const uid = userRecord.uid
+
+    console.log(`Setting custom claims for UID: ${uid}`)
+    await admin.auth().setCustomUserClaims(uid, { stanley: true })
+
+    await regRef.set({
+      uid: uid,
+      email: cleanEmail,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    })
+
+    console.log(`Creating Firestore document under stanley_users/${uid}`)
+    await db.collection('stanley_users').doc(uid).set({
+      email: cleanEmail,
+      status: 'active',
+      paid: true,
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
+    })
+
+    res.status(200).send({ success: true, uid: uid })
+  } catch (err) {
+    console.error('Error registering Stanley user:', err)
+    res.status(500).send({ error: err.message || 'Internal server error' })
+  }
+})
+
 exports.connectStripeAccount = onCall({ cors: true, secrets: [stripeSecretKey] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'User must be logged in')
 
@@ -1247,4 +1318,196 @@ exports.getProfitability = expenses.getProfitability;
 const webhooks = require('./webhooks/webhookPublisher');
 exports.webhookOnAppointmentWrite = webhooks.onAppointmentWrite;
 exports.webhookOnClientCreated = webhooks.onClientCreated;
+
+// ── Project Stanley Gemini Brain ─────────────────────────────────────────
+const geminiApiKey = defineSecret('GEMINI_API_KEY')
+
+exports.askStanleyAI = onCall({ cors: true, secrets: [geminiApiKey] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be logged in to use Project Stanley AI.')
+  }
+
+  // Double check that the user has an active Stanley license in Firestore
+  const uid = request.auth.uid
+  const userDoc = await admin.firestore().collection('stanley_users').doc(uid).get()
+  if (!userDoc.exists || userDoc.data().status !== 'active') {
+    throw new HttpsError('permission-denied', 'No active Project Stanley license found for this user.')
+  }
+
+  const { mode, prompt, elements, stepDescription, screenshotBase64 } = request.data
+  const apiKey = geminiApiKey.value() || process.env.GEMINI_API_KEY
+  if (!apiKey) {
+    throw new HttpsError('failed-precondition', 'Gemini API key is not configured on the server.')
+  }
+
+  if (mode === 'compile') {
+    if (!prompt) {
+      throw new HttpsError('invalid-argument', 'Missing prompt for compile mode')
+    }
+
+    const systemInstruction = `You are the brain of Project Stanley, a local browser automation butler.
+Your task is to take a natural language request from a user and translate it into a structured, step-by-step sequence of automation actions in JSON format.
+
+Available actions you can output:
+1. navigate: Goto a URL in the current tab. Keys: "action": "navigate", "url": "URL string"
+2. click: Click on a specific element. Keys: "action": "click", "description": "Short plain English description of what element to click"
+3. type: Type text into an input field. Keys: "action": "type", "description": "Short description of the input field to type into", "value": "Text value to type"
+4. wait: Wait for a specific duration in milliseconds. Keys: "action": "wait", "ms": number of milliseconds
+5. scrape: Scrape structured visible text content from the current tab. Keys: "action": "scrape", "selector": "Optional CSS selector to scope scrape to"
+6. open_tab: Open a new browser tab and optionally navigate to a URL. Keys: "action": "open_tab", "url": "Optional URL string". Returns a new tab index (0-based) you can use with switch_tab.
+7. switch_tab: Switch the active browser tab to a different tab by index. Keys: "action": "switch_tab", "index": number (0-indexed, where 0 is the first tab opened)
+8. close_tab: Close a browser tab by index. Keys: "action": "close_tab", "index": number (0-indexed)
+
+Multi-tab guidance:
+- Tabs are indexed starting at 0. The initial tab opened is always index 0.
+- Use open_tab to open a new tab (optionally with a URL), then switch_tab to go back to a previous tab.
+- When scraping multiple URLs, open each in a new tab, switch to it, scrape, then switch to the next.
+
+Output MUST be a valid JSON array of objects. Do not wrap it in markdown code fences or backticks. Start with [ and end with ].
+Example (multi-tab):
+[
+  { "action": "navigate", "url": "https://www.google.com" },
+  { "action": "open_tab", "url": "https://www.wikipedia.org" },
+  { "action": "scrape" },
+  { "action": "switch_tab", "index": 0 },
+  { "action": "type", "description": "Search input text area", "value": "weather today" },
+  { "action": "click", "description": "Search button" },
+  { "action": "scrape" },
+  { "action": "close_tab", "index": 1 }
+]`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `Translate this user prompt into a structured workflow:\n"${prompt}"` }] }],
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API Error: ${errText}`);
+      }
+
+      const resData = await response.json();
+      const text = resData.candidates[0].content.parts[0].text;
+      return { actions: JSON.parse(text) };
+    } catch (e) {
+      throw new HttpsError('internal', `Failed to compile prompt using Gemini: ${e.message}`);
+    }
+  } else if (mode === 'resolve') {
+    if (!stepDescription || !elements || !Array.isArray(elements)) {
+      throw new HttpsError('invalid-argument', 'Missing stepDescription or elements for resolve mode')
+    }
+
+    const systemInstruction = `You are a helper for a browser automation tool.
+You will be given:
+1. A target description (what the tool wants to click or type into).
+2. A JSON array of active interactive elements on the page, each with a unique 'index'.
+
+Your task is to identify the single element in the array that best matches the description.
+Return ONLY the index (as an integer) of the matched element. Do not write explanations, do not return JSON, just output the raw integer. If absolutely nothing matches, return -1.
+
+Example:
+Target: "Search bar input"
+Elements:
+[
+  {"index": 0, "tag": "A", "text": "Images"},
+  {"index": 1, "tag": "INPUT", "type": "text", "placeholder": "Search Google"},
+  {"index": 2, "tag": "BUTTON", "text": "Google Search"}
+]
+Output:
+1`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            role: 'user',
+            parts: [{
+              text: `Target Description: "${stepDescription}"\n\nInteractive Elements List:\n${JSON.stringify(elements, null, 2)}`
+            }]
+          }],
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          generationConfig: {
+            temperature: 0.1
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API Error: ${errText}`);
+      }
+
+      const resData = await response.json();
+      const text = resData.candidates[0].content.parts[0].text.trim();
+      const index = parseInt(text, 10);
+      return { index: isNaN(index) ? -1 : index };
+    } catch (e) {
+      throw new HttpsError('internal', `Failed to resolve selector using Gemini: ${e.message}`);
+    }
+  } else if (mode === 'resolveWithVision') {
+    if (!stepDescription || !screenshotBase64) {
+      throw new HttpsError('invalid-argument', 'Missing stepDescription or screenshotBase64 for resolveWithVision mode')
+    }
+
+    const systemInstruction = `You are helping a browser automation tool. Look at this screenshot of a webpage and identify the best Playwright locator to find the element described.
+You must return JSON only, with the format:
+{
+  "strategy": "role" | "text" | "placeholder" | "label",
+  "value": "string value to match",
+  "roleType": "button" | "link" | "checkbox" | "textbox" | "searchbox" | "spinbutton" (optional, required if strategy is role)
+}
+Return nothing but the valid JSON string. Do not wrap in markdown fences.`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            role: 'user',
+            parts: [
+              { text: `Target Element Description: "${stepDescription}"` },
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: screenshotBase64
+                }
+              }
+            ]
+          }],
+          systemInstruction: { parts: [{ text: systemInstruction }] },
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.1
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API Vision Error: ${errText}`);
+      }
+
+      const resData = await response.json();
+      const text = resData.candidates[0].content.parts[0].text.trim();
+      return JSON.parse(text);
+    } catch (e) {
+      throw new HttpsError('internal', `Failed to resolve selector using Gemini Vision: ${e.message}`);
+    }
+  } else {
+    throw new HttpsError('invalid-argument', 'Invalid mode, must be "compile", "resolve", or "resolveWithVision".')
+  }
+})
+
 

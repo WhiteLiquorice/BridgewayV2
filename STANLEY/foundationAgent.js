@@ -49,8 +49,12 @@ class StanleyFoundation {
     browser = null;
     context = null;
     page = null;
+    pages = [];
+    activePageIndex = 0;
     interactionTimeline = [];
+    sessionKey;
     constructor(config = {}) {
+        this.sessionKey = Math.random().toString(36).substring(2, 8);
         this.config = {
             headless: false, // Strict user directive: Must run headful so users can solve CAPTCHAs/MFA
             userAgent: config.userAgent ?? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -89,6 +93,17 @@ class StanleyFoundation {
         }
         this.context = await this.browser.newContext(contextOptions);
         this.page = await this.context.newPage();
+        this.pages = [this.page];
+        this.activePageIndex = 0;
+        // Auto-register any new tabs opened by the browser (e.g. target="_blank", window.open)
+        this.context.on('page', (newPage) => {
+            console.log('[StanleyFoundation] New tab auto-detected and registered.');
+            this.pages.push(newPage);
+            // Apply stealth init script to new page
+            newPage.addInitScript(() => {
+                Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            }).catch(() => { });
+        });
         // Mask the window.navigator.webdriver automation attribute
         await this.page.addInitScript(() => {
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -221,6 +236,344 @@ class StanleyFoundation {
         await this.page.fill(selector, text);
     }
     /**
+     * Extracts a list of visible, interactive elements on the page with a temporary stealth session attribute.
+     */
+    async getPrunedInteractiveElements() {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        return await this.page.evaluate((key) => {
+            const interactiveSelectors = [
+                'a', 'button', 'input', 'textarea', 'select',
+                '[role="button"]', '[role="link"]', '[role="checkbox"]', '[role="menuitem"]',
+                '[cursor="pointer"]'
+            ];
+            const elements = Array.from(document.querySelectorAll(interactiveSelectors.join(',')));
+            const pruned = [];
+            let index = 0;
+            const attr = `data-_${key}`;
+            elements.forEach(el => {
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0)
+                    return;
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+                    return;
+                el.setAttribute(attr, String(index));
+                pruned.push({
+                    index: index,
+                    tag: el.tagName,
+                    text: el.innerText ? el.innerText.trim().slice(0, 100) : '',
+                    placeholder: el.placeholder || '',
+                    ariaLabel: el.getAttribute('aria-label') || '',
+                    id: el.id || '',
+                    name: el.name || '',
+                    type: el.type || '',
+                    role: el.getAttribute('role') || ''
+                });
+                index++;
+            });
+            return pruned;
+        }, this.sessionKey);
+    }
+    /**
+     * Clicks an element by its custom stealth session attribute.
+     */
+    async clickByIndex(index) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        const attr = `data-_${this.sessionKey}`;
+        console.log(`[StanleyFoundation] Clicking element with ${attr}="${index}"`);
+        await this.page.click(`[${attr}="${index}"]`);
+    }
+    /**
+     * Types text into an element by its custom stealth session attribute.
+     */
+    async typeByIndex(index, text) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        const attr = `data-_${this.sessionKey}`;
+        console.log(`[StanleyFoundation] Fill element with ${attr}="${index}"`);
+        await this.page.fill(`[${attr}="${index}"]`, text);
+    }
+    /**
+     * Captures a JPEG screenshot as a base64 string for vision processing.
+     */
+    async captureScreenshotBase64() {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        const buffer = await this.page.screenshot({ type: 'jpeg', quality: 55 });
+        return buffer.toString('base64');
+    }
+    /**
+     * Tries to find and click an element using standard Playwright natural locators.
+     * Returns true if successful, false otherwise.
+     */
+    async clickByNaturalLocator(description) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        const text = description.trim();
+        const locators = [
+            ...['button', 'link', 'checkbox', 'tab', 'menuitem'].map(role => this.page.getByRole(role, { name: text, exact: false })),
+            this.page.getByText(text, { exact: false }),
+            this.page.getByLabel(text, { exact: false }),
+            this.page.getByPlaceholder(text, { exact: false })
+        ];
+        for (const locator of locators) {
+            try {
+                const count = await locator.count();
+                if (count > 0) {
+                    await locator.first().click({ timeout: 3000 });
+                    return true;
+                }
+            }
+            catch (err) {
+                // Ignore and try next locator
+            }
+        }
+        return false;
+    }
+    /**
+     * Tries to find and fill an input element using standard Playwright natural locators.
+     * Returns true if successful, false otherwise.
+     */
+    async typeByNaturalLocator(description, value) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        const text = description.trim();
+        const locators = [
+            this.page.getByPlaceholder(text, { exact: false }),
+            this.page.getByLabel(text, { exact: false }),
+            ...['textbox', 'searchbox', 'spinbutton'].map(role => this.page.getByRole(role, { name: text, exact: false })),
+            this.page.getByText(text, { exact: false })
+        ];
+        for (const locator of locators) {
+            try {
+                const count = await locator.count();
+                if (count > 0) {
+                    await locator.first().fill(value, { timeout: 3000 });
+                    return true;
+                }
+            }
+            catch (err) {
+                // Ignore and try next locator
+            }
+        }
+        return false;
+    }
+    /**
+     * Clicks an element matching a specific strategy/value locator returned by Vision.
+     */
+    async clickByStrategy(strategy, value, roleType) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        let locator;
+        if (strategy === 'role' && roleType) {
+            locator = this.page.getByRole(roleType, { name: value, exact: false });
+        }
+        else if (strategy === 'text') {
+            locator = this.page.getByText(value, { exact: false });
+        }
+        else if (strategy === 'label') {
+            locator = this.page.getByLabel(value, { exact: false });
+        }
+        else if (strategy === 'placeholder') {
+            locator = this.page.getByPlaceholder(value, { exact: false });
+        }
+        else {
+            throw new Error(`Unsupported strategy: ${strategy}`);
+        }
+        await locator.first().click({ timeout: 5000 });
+    }
+    /**
+     * Fills an input element matching a specific strategy/value locator returned by Vision.
+     */
+    async typeByStrategy(strategy, value, text, roleType) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        let locator;
+        if (strategy === 'role' && roleType) {
+            locator = this.page.getByRole(roleType, { name: value, exact: false });
+        }
+        else if (strategy === 'text') {
+            locator = this.page.getByText(value, { exact: false });
+        }
+        else if (strategy === 'label') {
+            locator = this.page.getByLabel(value, { exact: false });
+        }
+        else if (strategy === 'placeholder') {
+            locator = this.page.getByPlaceholder(value, { exact: false });
+        }
+        else {
+            throw new Error(`Unsupported strategy: ${strategy}`);
+        }
+        await locator.first().fill(text, { timeout: 5000 });
+    }
+    /**
+     * Scrapes structured visible text content from the current page.
+     */
+    async scrapeContent(selector) {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        return await this.page.evaluate((sel) => {
+            const root = sel ? document.querySelector(sel) : document.body;
+            if (!root)
+                return `Element with selector "${sel}" not found.`;
+            const elementsToScrape = ['p', 'li', 'td', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span'];
+            const textNodes = [];
+            if (!sel) {
+                textNodes.push(`Title: ${document.title}`);
+            }
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, {
+                acceptNode: (node) => {
+                    const el = node;
+                    const tagName = el.tagName.toLowerCase();
+                    if (elementsToScrape.includes(tagName)) {
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0)
+                            return NodeFilter.FILTER_REJECT;
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                    return NodeFilter.FILTER_SKIP;
+                }
+            });
+            let currentNode = walker.nextNode();
+            while (currentNode) {
+                const text = currentNode.textContent?.trim();
+                if (text && text.length > 0) {
+                    textNodes.push(text);
+                }
+                currentNode = walker.nextNode();
+            }
+            const uniqueTexts = Array.from(new Set(textNodes));
+            return uniqueTexts.join('\n');
+        }, selector);
+    }
+    /**
+     * Performs heuristic checks to see if the page is blocked by CAPTCHA, Cloudflare, etc.
+     */
+    async isPageBlocked() {
+        if (!this.page)
+            throw new Error("Agent browser session is not initialized.");
+        return await this.page.evaluate(() => {
+            const selectors = [
+                'iframe[src*="recaptcha"]',
+                'iframe[src*="hcaptcha"]',
+                'iframe[src*="turnstile"]',
+                '[class*="captcha"]',
+                '[id*="captcha"]',
+                '[class*="modal"]',
+                '[id*="modal"]',
+                '[role="dialog"]',
+                '#challenge-running',
+                '#cf-challenge',
+                '#challenge-form'
+            ];
+            for (const selector of selectors) {
+                const els = Array.from(document.querySelectorAll(selector));
+                for (const el of els) {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width > 0 && rect.height > 0) {
+                        const style = window.getComputedStyle(el);
+                        if (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0') {
+                            return { blocked: true, hint: `Detected blocking element matching selector: "${selector}"` };
+                        }
+                    }
+                }
+            }
+            return { blocked: false, hint: '' };
+        });
+    }
+    /**
+     * Waits until the page network is idle or a timeout is reached.
+     * Prevents retrying actions into an actively-loading page.
+     */
+    async waitForPageStable(ms = 500) {
+        if (!this.page)
+            return;
+        try {
+            await this.page.waitForLoadState('networkidle', { timeout: ms });
+        }
+        catch {
+            // Timeout is acceptable — page may be a SPA with persistent connections
+        }
+    }
+    /**
+     * Opens a new browser tab, applies stealth config, and optionally navigates to a URL.
+     * Returns the index of the new tab in the pages array.
+     */
+    async openTab(url) {
+        if (!this.context)
+            throw new Error('Browser context not established.');
+        const newPage = await this.context.newPage();
+        await newPage.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        });
+        // Register in array (context 'page' event may have already added it; avoid duplicates)
+        if (!this.pages.includes(newPage)) {
+            this.pages.push(newPage);
+        }
+        const index = this.pages.indexOf(newPage);
+        this.activePageIndex = index;
+        this.page = newPage;
+        if (url) {
+            await newPage.goto(url, { waitUntil: 'load' });
+        }
+        console.log(`[StanleyFoundation] Opened new tab at index ${index}${url ? ': ' + url : ''}.`);
+        return index;
+    }
+    /**
+     * Switches the active page context to the tab at the given index.
+     */
+    async switchTab(index) {
+        if (index < 0 || index >= this.pages.length) {
+            throw new Error(`Tab index ${index} is out of range (${this.pages.length} tabs open).`);
+        }
+        this.activePageIndex = index;
+        this.page = this.pages[index];
+        console.log(`[StanleyFoundation] Switched to tab ${index}.`);
+    }
+    /**
+     * Closes the tab at the given index and updates the active page reference.
+     */
+    async closeTab(index) {
+        if (index < 0 || index >= this.pages.length) {
+            throw new Error(`Tab index ${index} is out of range (${this.pages.length} tabs open).`);
+        }
+        await this.pages[index].close();
+        this.pages.splice(index, 1);
+        // Clamp activePageIndex to valid range
+        if (this.pages.length === 0) {
+            this.page = null;
+            this.activePageIndex = 0;
+        }
+        else {
+            this.activePageIndex = Math.min(this.activePageIndex, this.pages.length - 1);
+            this.page = this.pages[this.activePageIndex];
+        }
+        console.log(`[StanleyFoundation] Closed tab ${index}. Active tab is now ${this.activePageIndex}.`);
+    }
+    /**
+     * Strips all temporary stealth attributes from the DOM.
+     */
+    async cleanupStealthAttributes() {
+        if (!this.page)
+            return;
+        try {
+            await this.page.evaluate((key) => {
+                const attr = `data-_${key}`;
+                const elements = document.querySelectorAll(`[${attr}]`);
+                elements.forEach(el => el.removeAttribute(attr));
+            }, this.sessionKey);
+        }
+        catch (err) {
+            console.error("[StanleyFoundation] Error cleaning up stealth attributes:", err);
+        }
+    }
+    /**
      * Saves the browser state (cookies + local storage contents) to file.
      */
     async saveState() {
@@ -261,6 +614,8 @@ class StanleyFoundation {
         this.browser = null;
         this.context = null;
         this.page = null;
+        this.pages = [];
+        this.activePageIndex = 0;
     }
 }
 exports.StanleyFoundation = StanleyFoundation;
