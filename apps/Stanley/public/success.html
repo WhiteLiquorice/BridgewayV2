@@ -37,10 +37,6 @@
       }
     }
   </script>
-  <!-- Firebase App & Services Compat CDN -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <style>
     .glass-card {
       background: rgba(11, 15, 25, 0.7);
@@ -61,10 +57,8 @@
     <div class="glass-card p-8 rounded-3xl flex flex-col justify-between border border-white/10 shadow-2xl">
       <div>
         <div class="flex items-center gap-3 mb-6">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-500 to-accent-500 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-darkbg-900" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1-5.5v3h-2v-3h2zm-4 7l3 3.5 3-3.5h-6zM5 8.5L12 12l7-3.5V7H5v1.5z" />
-            </svg>
+          <div class="w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-brand-500/20 bg-darkbg-800 flex items-center justify-center">
+            <img src="stan-logo.png" alt="Stanley Logo" class="w-full h-full object-cover" />
           </div>
           <span class="font-heading font-extrabold text-xl tracking-wide">STANLEY SETUP</span>
         </div>
@@ -77,7 +71,7 @@
         <!-- Download Buttons -->
         <div class="flex flex-col gap-4">
           <!-- Windows App -->
-          <a href="stanley-daemon.exe" download class="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-500/30 flex items-center gap-4 group transition-all">
+          <a href="stanley-setup.exe" download class="p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-500/30 flex items-center gap-4 group transition-all">
             <div class="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500 group-hover:scale-105 transition-transform">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1M12 4v12M8 12l4 4 4-4"/>
@@ -143,7 +137,7 @@
             <span class="text-brand-500 font-bold">5.</span>
             <div>
               <strong class="text-gray-300 block">Run the Windows Desktop Host</strong>
-              Double-click <code class="text-accent-500 bg-white/5 px-1 rounded">stanley-daemon.exe</code>. A terminal wrapper window will flash and register the host connection in the background.
+              Double-click <code class="text-accent-500 bg-white/5 px-1 rounded">stanley-setup.exe</code>. A terminal wrapper window will flash and register the host connection in the background.
             </div>
           </li>
         </ol>
@@ -181,51 +175,45 @@
   </div>
 
   <script>
-    // Firebase Web Configurations (Replaced with your project details)
-    const firebaseConfig = {
-      apiKey: "AIzaSyAs-PlaceholderApiKeyGoesHere",
-      authDomain: "bridgeway-db29e.firebaseapp.com",
-      projectId: "bridgeway-db29e",
-      storageBucket: "bridgeway-db29e.appspot.com",
-      messagingSenderId: "53861905686",
-      appId: "1:53861905686:web:7f61765c71ab5e807dfd80"
-    };
-
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.firestore();
-
     const form = document.getElementById('signup-form');
     const submitBtn = document.getElementById('submit-btn');
     const statusMsg = document.getElementById('status-message');
 
+    // Parse the Stripe checkout session ID from the URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('session_id');
+
+    if (!sessionId) {
+      statusMsg.className = "text-sm mt-3 text-center text-red-500 font-semibold block";
+      statusMsg.textContent = "No active Stripe checkout session detected. Please subscribe first.";
+      submitBtn.disabled = true;
+      submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!sessionId) return;
+
       const email = document.getElementById('email').value.trim();
       const password = document.getElementById('password').value;
 
       statusMsg.className = "text-sm mt-3 text-center text-cyan-400";
-      statusMsg.textContent = "Registering user credentials...";
+      statusMsg.textContent = "Verifying payment session and activating account...";
       statusMsg.classList.remove('hidden');
       submitBtn.disabled = true;
 
       try {
-        const cleanEmail = email.toLowerCase();
-        
-        // Create user in Firebase Auth
-        const cred = await auth.createUserWithEmailAndPassword(email, password);
-        const user = cred.user;
+        const response = await fetch('/registerStanleyUser', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, sessionId })
+        });
 
-        // Write user details to Firestore as Active directly
-        const userPayload = {
-          email: cleanEmail,
-          status: 'active',
-          paid: true,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        };
+        const data = await response.json();
 
-        await db.collection('users').doc(user.uid).set(userPayload);
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to register account.");
+        }
 
         statusMsg.className = "text-sm mt-3 text-center text-brand-500 font-semibold";
         statusMsg.textContent = "Paid Account Activated! You may now log in to the extension.";
